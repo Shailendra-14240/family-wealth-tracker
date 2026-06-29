@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 
-const ACCOUNT_TYPES = ['brokerage', 'savings', 'loan', 'mutual_fund', 'crypto', 'other']
+const ACCOUNT_TYPES = ['demat', 'savings', 'loan', 'mutual_fund', 'crypto', 'other']
 
 export default function Accounts() {
   const [accounts, setAccounts] = useState([])

@@ -3,7 +3,7 @@
 create table accounts (
   id         bigint generated always as identity primary key,
   name       text not null,
-  type       text not null check (type in ('brokerage','savings','loan','mutual_fund','crypto','other')),
+  type       text not null check (type in ('demat','savings','loan','mutual_fund','crypto','other')),
   balance    numeric(14,2) not null default 0,
   created_at timestamptz default now()
 );

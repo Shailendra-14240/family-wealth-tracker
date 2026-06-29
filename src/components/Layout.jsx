@@ -13,8 +13,8 @@ export default function Layout({ children }) {
       <header className="bg-gray-900 border-b border-gray-800 px-4 py-3">
         <h1 className="text-lg font-bold">Family Wealth Tracker</h1>
       </header>
-      <main className="flex-1 p-4 pb-24">{children}</main>
-      <nav className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800">
+      <main className="flex-1 p-4 pb-28">{children}</main>
+      <nav className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 z-10">
         <div className="flex justify-around">
           {navItems.map((item) => (
             <NavLink
