@@ -1,14 +1,23 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { calculateHoldings, calculateSummary } from '../lib/pnlCalc'
 
 export default function Dashboard() {
   const [accounts, setAccounts] = useState([])
+  const [summary, setSummary] = useState({ totalInvested: 0, totalRealizedPnl: 0 })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!supabase) return
-    supabase.from('accounts').select('*').then(({ data }) => {
-      if (data) setAccounts(data)
+    Promise.all([
+      supabase.from('accounts').select('*'),
+      supabase.from('transactions').select('*'),
+    ]).then(([acctRes, txnRes]) => {
+      if (acctRes.data) setAccounts(acctRes.data)
+      if (txnRes.data && txnRes.data.length) {
+        const h = calculateHoldings(txnRes.data)
+        setSummary(calculateSummary(h))
+      }
       setLoading(false)
     })
   }, [])
@@ -18,7 +27,7 @@ export default function Dashboard() {
 
   const assets = accounts.filter((a) => a.balance > 0).reduce((s, a) => s + Number(a.balance), 0)
   const liabilities = accounts.filter((a) => a.balance < 0).reduce((s, a) => s + Number(a.balance), 0)
-  const netWorth = assets + liabilities
+  const netWorth = assets + liabilities + summary.totalInvested
 
   return (
     <div className="space-y-4">
@@ -37,19 +46,21 @@ export default function Dashboard() {
           <p className="text-xl font-bold">{accounts.length}</p>
         </div>
         <div className="bg-gray-900 rounded-xl p-3 text-center">
-          <p className="text-xs text-gray-400">Assets</p>
-          <p className="text-xl font-bold text-green-400">₹{assets.toLocaleString()}</p>
+          <p className="text-xs text-gray-400">Invested</p>
+          <p className="text-xl font-bold text-blue-400">₹{summary.totalInvested.toLocaleString()}</p>
         </div>
         <div className="bg-gray-900 rounded-xl p-3 text-center">
-          <p className="text-xs text-gray-400">Liabilities</p>
-          <p className="text-xl font-bold text-red-400">₹{Math.abs(liabilities).toLocaleString()}</p>
+          <p className="text-xs text-gray-400">Realized P&L</p>
+          <p className={`text-xl font-bold ${summary.totalRealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+            {summary.totalRealizedPnl >= 0 ? '+' : ''}₹{summary.totalRealizedPnl.toLocaleString()}
+          </p>
         </div>
       </div>
 
       <div className="bg-gray-900 rounded-xl p-4">
         <p className="text-sm text-gray-400 mb-2">Net Worth Trend</p>
         <div className="h-32 flex items-center justify-center text-gray-600 border border-dashed border-gray-700 rounded-lg">
-          Chart will appear after adding transaction history
+          Chart coming soon
         </div>
       </div>
 
