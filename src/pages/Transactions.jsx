@@ -16,6 +16,7 @@ export default function Transactions() {
   const [showForm, setShowForm] = useState(false)
   const fileRef = useRef()
   const [broker, setBroker] = useState('')
+  const [csvAccountId, setCsvAccountId] = useState('')
   const [parsed, setParsed] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [form, setForm] = useState({
@@ -73,7 +74,8 @@ export default function Transactions() {
   const handleConfirmUpload = async () => {
     if (!parsed || !parsed.rows.length || !supabase) return
     setUploading(true)
-    const { data, error } = await supabase.from('transactions').insert(parsed.rows).select('*, accounts(name)')
+    const rows = parsed.rows.map(r => ({ ...r, account_id: csvAccountId || null }))
+    const { data, error } = await supabase.from('transactions').insert(rows).select('*, accounts(name)')
     if (data) {
       setTxns([...data, ...txns])
       setParsed(null)
@@ -95,12 +97,12 @@ export default function Transactions() {
       <div className="bg-gray-900 rounded-xl p-4">
         <p className="text-sm text-gray-400 mb-2">Upload trade history (CSV)</p>
         <div className="flex gap-2 mb-3">
-          <select
-            value={broker}
-            onChange={(e) => setBroker(e.target.value)}
-            className="bg-gray-800 rounded px-3 py-1.5 text-sm flex-1"
-          >
+          <select value={broker} onChange={(e) => setBroker(e.target.value)} className="bg-gray-800 rounded px-3 py-1.5 text-sm flex-1">
             {BROKERS.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
+          </select>
+          <select value={csvAccountId} onChange={(e) => setCsvAccountId(e.target.value)} className="bg-gray-800 rounded px-3 py-1.5 text-sm flex-1">
+            <option value="">Select account</option>
+            {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
         </div>
         <input
