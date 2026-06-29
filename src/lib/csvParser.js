@@ -11,6 +11,8 @@ const FORMATS = [
       type: headers.findIndex(h => /trade_type|transaction_type/i.test(h)),
       qty: headers.findIndex(h => /^quantity$/i.test(h)),
       price: headers.findIndex(h => /^price$/i.test(h) || /average.?price/i.test(h)),
+      order_id: headers.findIndex(h => /^trade_id$/i.test(h)),
+      order_execution_time: headers.findIndex(h => /order_execution_time|trade_time/i.test(h)),
     }),
   },
   {
@@ -121,6 +123,8 @@ export function parseCSV(text, formatId) {
         qty: parseValue(raw.qty),
         price: parseValue(raw.price),
         date: parseDate(raw.date),
+        order_id: raw.order_id || null,
+        order_execution_time: raw.order_execution_time || null,
       }
       if (!row.symbol) { errors.push(`Row ${i + 1}: missing symbol`); continue }
       if (row.qty <= 0) { errors.push(`Row ${i + 1}: invalid qty (${raw.qty})`); continue }

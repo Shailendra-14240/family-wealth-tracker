@@ -75,11 +75,31 @@ export default function Transactions() {
   const handleConfirmUpload = async () => {
     if (!parsed || !parsed.rows.length || !supabase) return
     setUploading(true)
-    const rows = parsed.rows.map(r => ({ ...r, account_id: csvAccountId || null }))
-    const { data, error } = await supabase.from('transactions').insert(rows).select('*, accounts(name)')
+
+    // Dedup: skip rows with order_ids that already exist
+    let rows = parsed.rows.map(r => ({ ...r, account_id: csvAccountId || null }))
+    const orderIds = rows.map(r => r.order_id).filter(Boolean)
+    if (orderIds.length) {
+      const { data: existing } = await supabase
+        .from('transactions')
+        .select('order_id')
+        .in('order_id', orderIds)
+      const existingIds = new Set((existing || []).map(r => r.order_id))
+      rows = rows.filter(r => !r.order_id || !existingIds.has(r.order_id))
+    }
+
+    const skipped = parsed.rows.length - rows.length
+    if (!rows.length) {
+      setParsed({ ...parsed, errors: [`All ${skipped} rows already exist (duplicate order_ids)`] })
+      setUploading(false)
+      return
+    }
+
+    const { data } = await supabase.from('transactions').insert(rows).select('*, accounts(name)')
     if (data) {
       setTxns([...data, ...txns])
-      setParsed(null)
+      const msg = skipped > 0 ? `Uploaded ${rows.length} (skipped ${skipped} duplicates)` : `Uploaded ${rows.length} transactions`
+      setParsed({ ...parsed, rows: [], errors: [msg] })
       fileRef.current.value = ''
     }
     setUploading(false)

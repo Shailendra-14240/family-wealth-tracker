@@ -19,16 +19,20 @@ create table holdings (
 );
 
 create table transactions (
-  id         bigint generated always as identity primary key,
-  account_id bigint references accounts(id) on delete cascade,
-  date       date not null,
-  type       text not null check (type in ('buy','sell')),
-  symbol     text not null,
-  qty        numeric(12,2) not null,
-  price      numeric(12,2) not null,
-  notes      text,
-  created_at timestamptz default now()
+  id                  bigint generated always as identity primary key,
+  account_id          bigint references accounts(id) on delete cascade,
+  date                date not null,
+  type                text not null check (type in ('buy','sell')),
+  symbol              text not null,
+  qty                 numeric(12,2) not null,
+  price               numeric(12,2) not null,
+  order_id            text,
+  order_execution_time timestamptz,
+  notes               text,
+  created_at          timestamptz default now()
 );
+
+create unique index idx_transactions_order_id on transactions(order_id) where order_id is not null;
 
 create table net_worth_snapshots (
   id          bigint generated always as identity primary key,
