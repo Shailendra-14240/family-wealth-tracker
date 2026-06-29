@@ -18,6 +18,9 @@ export default function Transactions() {
   const [broker, setBroker] = useState('')
   const [csvAccountId, setCsvAccountId] = useState('')
   const [filterAccountId, setFilterAccountId] = useState('')
+  const [filterDateFrom, setFilterDateFrom] = useState('')
+  const [filterDateTo, setFilterDateTo] = useState('')
+  const [filterSymbol, setFilterSymbol] = useState('')
   const [parsed, setParsed] = useState(null)
   const [uploadStatus, setUploadStatus] = useState(null)
   const [uploading, setUploading] = useState(false)
@@ -225,27 +228,55 @@ export default function Transactions() {
         </form>
       )}
 
-      <div className="flex gap-2 mb-2">
-        <select value={filterAccountId} onChange={(e) => setFilterAccountId(e.target.value)} className="bg-gray-800 rounded px-3 py-1.5 text-sm flex-1">
-          <option value="">All accounts</option>
-          {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-        </select>
-        <p className="text-sm text-gray-500 self-center">{txns.length} total</p>
+      <div className="bg-gray-900 rounded-xl p-4 space-y-3">
+        <p className="text-xs text-gray-400 font-medium">Filters</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-gray-500">From</label>
+            <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)}
+              className="w-full bg-gray-800 rounded px-2 py-1.5 text-sm mt-1" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500">To</label>
+            <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)}
+              className="w-full bg-gray-800 rounded px-2 py-1.5 text-sm mt-1" />
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <select value={filterAccountId} onChange={(e) => setFilterAccountId(e.target.value)} className="bg-gray-800 rounded px-3 py-1.5 text-sm flex-1">
+            <option value="">All accounts</option>
+            {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+          <input type="text" placeholder="Symbol" value={filterSymbol} onChange={e => setFilterSymbol(e.target.value.toUpperCase())}
+            className="bg-gray-800 rounded px-3 py-1.5 text-sm w-28" />
+        </div>
       </div>
 
       <div className="space-y-2">
-        {(filterAccountId ? txns.filter(t => t.account_id === Number(filterAccountId)) : txns).map((t) => (
-          <div key={t.id} className="bg-gray-900 rounded-xl p-4">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="font-semibold">{t.symbol}</p>
-                <p className="text-xs text-gray-500">{t.type.toUpperCase()} {t.qty} @ ₹{Number(t.price).toLocaleString()} &middot; {t.date}</p>
-                {t.accounts?.name && <p className="text-xs text-gray-600">{t.accounts.name}</p>}
-              </div>
-              <p className="font-medium">₹{(Number(t.qty) * Number(t.price)).toLocaleString()}</p>
-            </div>
-          </div>
-        ))}
+        {(() => {
+          let filtered = txns
+          if (filterAccountId) filtered = filtered.filter(t => t.account_id === Number(filterAccountId))
+          if (filterDateFrom) filtered = filtered.filter(t => t.date >= filterDateFrom)
+          if (filterDateTo) filtered = filtered.filter(t => t.date <= filterDateTo)
+          if (filterSymbol) filtered = filtered.filter(t => t.symbol.includes(filterSymbol))
+          return (
+            <>
+              <p className="text-xs text-gray-500 mb-1">{filtered.length} of {txns.length} transactions</p>
+              {filtered.map((t) => (
+                <div key={t.id} className="bg-gray-900 rounded-xl p-4">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="font-semibold">{t.symbol}</p>
+                      <p className="text-xs text-gray-500">{t.type.toUpperCase()} {t.qty} @ ₹{Number(t.price).toLocaleString()} &middot; {t.date}</p>
+                      {t.accounts?.name && <p className="text-xs text-gray-600">{t.accounts.name}</p>}
+                    </div>
+                    <p className="font-medium">₹{(Number(t.qty) * Number(t.price)).toLocaleString()}</p>
+                  </div>
+                </div>
+              ))}
+            </>
+          )
+        })()}
       </div>
     </div>
   )
