@@ -19,6 +19,7 @@ export default function Transactions() {
   const [csvAccountId, setCsvAccountId] = useState('')
   const [filterAccountId, setFilterAccountId] = useState('')
   const [parsed, setParsed] = useState(null)
+  const [uploadStatus, setUploadStatus] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [form, setForm] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -63,6 +64,7 @@ export default function Transactions() {
   const handleFileSelect = (e) => {
     const file = fileRef.current?.files?.[0]
     if (!file) return
+    setUploadStatus(null)
     const reader = new FileReader()
     reader.onload = (evt) => {
       const text = evt.target.result
@@ -75,8 +77,8 @@ export default function Transactions() {
   const handleConfirmUpload = async () => {
     if (!parsed || !parsed.rows.length || !supabase) return
     setUploading(true)
+    setUploadStatus(null)
 
-    // Dedup: skip rows with order_ids that already exist
     let rows = parsed.rows.map(r => ({ ...r, account_id: csvAccountId || null }))
     const orderIds = rows.map(r => r.order_id).filter(Boolean)
     if (orderIds.length) {
@@ -90,7 +92,7 @@ export default function Transactions() {
 
     const skipped = parsed.rows.length - rows.length
     if (!rows.length) {
-      setParsed({ ...parsed, errors: [`All ${skipped} rows already exist (duplicate order_ids)`] })
+      setUploadStatus({ type: 'warn', msg: `All ${skipped} rows already exist (duplicate order_ids)` })
       setUploading(false)
       return
     }
@@ -98,8 +100,11 @@ export default function Transactions() {
     const { data } = await supabase.from('transactions').insert(rows).select('*, accounts(name)')
     if (data) {
       setTxns([...data, ...txns])
-      const msg = skipped > 0 ? `Uploaded ${rows.length} (skipped ${skipped} duplicates)` : `Uploaded ${rows.length} transactions`
-      setParsed({ ...parsed, rows: [], errors: [msg] })
+      const msg = skipped > 0
+        ? `Uploaded ${rows.length} (skipped ${skipped} duplicate${skipped > 1 ? 's' : ''})`
+        : `Uploaded ${rows.length} transactions`
+      setUploadStatus({ type: 'success', msg })
+      setParsed(null)
       fileRef.current.value = ''
     }
     setUploading(false)
@@ -176,9 +181,15 @@ export default function Transactions() {
             )}
 
             {parsed.errors.length > 0 && (
-              <div className="text-xs text-red-400 max-h-20 overflow-y-auto">
-                {parsed.errors.map((e, i) => <p key={i}>{e}</p>)}
+              <div className="text-xs max-h-20 overflow-y-auto space-y-1">
+                {parsed.errors.map((e, i) => (
+                  <p key={i} className="text-yellow-400">{e}</p>
+                ))}
               </div>
+            )}
+
+            {uploadStatus && (
+              <p className={`text-sm ${uploadStatus.type === 'success' ? 'text-green-400' : 'text-yellow-400'}`}>{uploadStatus.msg}</p>
             )}
           </div>
         )}
