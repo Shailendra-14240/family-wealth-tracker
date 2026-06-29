@@ -79,33 +79,38 @@ export default function Transactions() {
     setUploading(true)
     setUploadStatus(null)
 
-    let rows = parsed.rows.map(r => ({ ...r, account_id: csvAccountId || null }))
-    const orderIds = rows.map(r => r.order_id).filter(Boolean)
-    if (orderIds.length) {
-      const { data: existing } = await supabase
-        .from('transactions')
-        .select('order_id')
-        .in('order_id', orderIds)
-      const existingIds = new Set((existing || []).map(r => r.order_id))
-      rows = rows.filter(r => !r.order_id || !existingIds.has(r.order_id))
-    }
+    try {
+      let rows = parsed.rows.map(r => ({ ...r, account_id: csvAccountId || null }))
+      const orderIds = rows.map(r => r.order_id).filter(Boolean)
+      if (orderIds.length) {
+        const { data: existing } = await supabase
+          .from('transactions')
+          .select('order_id')
+          .in('order_id', orderIds)
+        const existingIds = new Set((existing || []).map(r => r.order_id))
+        rows = rows.filter(r => !r.order_id || !existingIds.has(r.order_id))
+      }
 
-    const skipped = parsed.rows.length - rows.length
-    if (!rows.length) {
-      setUploadStatus({ type: 'warn', msg: `All ${skipped} rows already exist (duplicate order_ids)` })
-      setUploading(false)
-      return
-    }
+      const skipped = parsed.rows.length - rows.length
+      if (!rows.length) {
+        setUploadStatus({ type: 'warn', msg: `All ${skipped} rows already exist (duplicate order_ids)` })
+        setUploading(false)
+        return
+      }
 
-    const { data } = await supabase.from('transactions').insert(rows).select('*, accounts(name)')
-    if (data) {
-      setTxns([...data, ...txns])
-      const msg = skipped > 0
-        ? `Uploaded ${rows.length} (skipped ${skipped} duplicate${skipped > 1 ? 's' : ''})`
-        : `Uploaded ${rows.length} transactions`
-      setUploadStatus({ type: 'success', msg })
-      setParsed(null)
-      fileRef.current.value = ''
+      const { data, error } = await supabase.from('transactions').insert(rows).select('*, accounts(name)')
+      if (error) throw new Error(error.message)
+      if (data) {
+        setTxns([...data, ...txns])
+        const msg = skipped > 0
+          ? `Uploaded ${rows.length} (skipped ${skipped} duplicate${skipped > 1 ? 's' : ''})`
+          : `Uploaded ${rows.length} transactions`
+        setUploadStatus({ type: 'success', msg })
+        setParsed(null)
+        fileRef.current.value = ''
+      }
+    } catch (err) {
+      setUploadStatus({ type: 'error', msg: `Upload failed: ${err.message}` })
     }
     setUploading(false)
   }
@@ -189,7 +194,10 @@ export default function Transactions() {
             )}
 
             {uploadStatus && (
-              <p className={`text-sm ${uploadStatus.type === 'success' ? 'text-green-400' : 'text-yellow-400'}`}>{uploadStatus.msg}</p>
+              <p className={`text-sm ${
+                uploadStatus.type === 'success' ? 'text-green-400' :
+                uploadStatus.type === 'error' ? 'text-red-400' : 'text-yellow-400'
+              }`}>{uploadStatus.msg}</p>
             )}
           </div>
         )}
