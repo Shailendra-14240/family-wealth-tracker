@@ -1,13 +1,22 @@
-const DEMO_HOLDINGS = [
-  { symbol: 'RELIANCE', qty: 25, avgPrice: 2850, ltp: 3020, account: 'Zerodha (Mine)' },
-  { symbol: 'TCS', qty: 10, avgPrice: 3850, ltp: 4100, account: 'Zerodha (Mine)' },
-  { symbol: 'HDFCBANK', qty: 50, avgPrice: 1620, ltp: 1750, account: 'Zerodha (Dad)' },
-  { symbol: 'INFY', qty: 30, avgPrice: 1480, ltp: 1590, account: 'Zerodha (Dad)' },
-  { symbol: 'ITC', qty: 100, avgPrice: 425, ltp: 480, account: 'Zerodha (Mine)' },
-]
+import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 
 export default function Holdings() {
-  const totalPnl = DEMO_HOLDINGS.reduce((s, h) => s + (h.ltp - h.avgPrice) * h.qty, 0)
+  const [holdings, setHoldings] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!supabase) return
+    supabase.from('holdings').select('*, accounts(name)').order('created_at').then(({ data }) => {
+      if (data) setHoldings(data)
+      setLoading(false)
+    })
+  }, [])
+
+  if (!supabase) return <p className="text-gray-500 text-center mt-10">Connect Supabase to see holdings</p>
+  if (loading) return <p className="text-gray-500 text-center mt-10">Loading...</p>
+
+  const totalPnl = holdings.reduce((s, h) => s + (Number(h.ltp || 0) - Number(h.avg_price)) * Number(h.qty), 0)
 
   return (
     <div className="space-y-4">
@@ -18,19 +27,23 @@ export default function Holdings() {
         </p>
       </div>
 
+      {holdings.length === 0 && (
+        <p className="text-gray-500 text-center py-10">No holdings yet. Add transactions to build your portfolio.</p>
+      )}
+
       <div className="space-y-2">
-        {DEMO_HOLDINGS.map((h, i) => {
-          const pnl = (h.ltp - h.avgPrice) * h.qty
+        {holdings.map((h) => {
+          const pnl = (Number(h.ltp || 0) - Number(h.avg_price)) * Number(h.qty)
           return (
-            <div key={i} className="bg-gray-900 rounded-xl p-4">
+            <div key={h.id} className="bg-gray-900 rounded-xl p-4">
               <div className="flex justify-between items-start">
                 <div>
                   <p className="font-semibold">{h.symbol}</p>
-                  <p className="text-xs text-gray-500">{h.qty} shares @ ₹{h.avgPrice}</p>
-                  <p className="text-xs text-gray-600">{h.account}</p>
+                  <p className="text-xs text-gray-500">{h.qty} shares @ ₹{Number(h.avg_price).toLocaleString()}</p>
+                  <p className="text-xs text-gray-600">{h.accounts?.name}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-medium">₹{(h.ltp * h.qty).toLocaleString()}</p>
+                  <p className="font-medium">₹{(Number(h.ltp || 0) * Number(h.qty)).toLocaleString()}</p>
                   <p className={`text-sm ${pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                     {pnl >= 0 ? '+' : ''}₹{pnl.toLocaleString()}
                   </p>

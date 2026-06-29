@@ -1,26 +1,39 @@
-import { useState } from 'react'
-
-const DEMO_ACCOUNTS = [
-  { id: 1, name: 'Zerodha (Mine)', type: 'brokerage', balance: 352_000 },
-  { id: 2, name: 'Zerodha (Dad)', type: 'brokerage', balance: 218_000 },
-  { id: 3, name: 'Savings (HDFC)', type: 'savings', balance: 480_000 },
-  { id: 4, name: 'Home Loan', type: 'loan', balance: -1_200_000 },
-]
+import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 
 const ACCOUNT_TYPES = ['brokerage', 'savings', 'loan', 'mutual_fund', 'crypto', 'other']
 
 export default function Accounts() {
-  const [accounts, setAccounts] = useState(DEMO_ACCOUNTS)
+  const [accounts, setAccounts] = useState([])
+  const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ name: '', type: 'savings', balance: '' })
 
-  const handleAdd = (e) => {
+  useEffect(() => {
+    if (!supabase) return
+    supabase.from('accounts').select('*').order('created_at').then(({ data }) => {
+      if (data) setAccounts(data)
+      setLoading(false)
+    })
+  }, [])
+
+  const handleAdd = async (e) => {
     e.preventDefault()
-    if (!form.name || form.balance === '') return
-    setAccounts([...accounts, { id: Date.now(), name: form.name, type: form.type, balance: Number(form.balance) }])
-    setForm({ name: '', type: 'savings', balance: '' })
-    setShowForm(false)
+    if (!form.name || form.balance === '' || !supabase) return
+    const { data } = await supabase.from('accounts').insert({
+      name: form.name,
+      type: form.type,
+      balance: Number(form.balance),
+    }).select().single()
+    if (data) {
+      setAccounts([...accounts, data])
+      setForm({ name: '', type: 'savings', balance: '' })
+      setShowForm(false)
+    }
   }
+
+  if (!supabase) return <p className="text-gray-500 text-center mt-10">Connect Supabase to manage accounts</p>
+  if (loading) return <p className="text-gray-500 text-center mt-10">Loading...</p>
 
   return (
     <div className="space-y-4">
@@ -48,7 +61,7 @@ export default function Accounts() {
               <p className="text-xs text-gray-500 capitalize">{acct.type.replace('_', ' ')}</p>
             </div>
             <p className={`font-semibold ${acct.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-              ₹{acct.balance.toLocaleString()}
+              ₹{Number(acct.balance).toLocaleString()}
             </p>
           </div>
         ))}
