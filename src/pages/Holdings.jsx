@@ -1,29 +1,68 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { calculateHoldings, calculateSummary } from '../lib/pnlCalc'
 
 export default function Holdings() {
-  const [holdings, setHoldings] = useState([])
-  const [summary, setSummary] = useState({ totalInvested: 0, totalRealizedPnl: 0 })
+  const [allTxns, setAllTxns] = useState([])
   const [loading, setLoading] = useState(true)
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [symbolFilter, setSymbolFilter] = useState('')
 
   useEffect(() => {
     if (!supabase) return
-    supabase.from('transactions').select('*').then(({ data }) => {
-      if (data && data.length) {
-        const h = calculateHoldings(data)
-        setHoldings(h)
-        setSummary(calculateSummary(h))
-      }
+    supabase.from('transactions').select('*').order('date').then(({ data }) => {
+      if (data) setAllTxns(data)
       setLoading(false)
     })
   }, [])
+
+  const filtered = useMemo(() => {
+    let txns = allTxns
+    if (dateFrom) txns = txns.filter(t => t.date >= dateFrom)
+    if (dateTo) txns = txns.filter(t => t.date <= dateTo)
+    if (symbolFilter.trim()) {
+      const symbols = symbolFilter.toUpperCase().split(',').map(s => s.trim()).filter(Boolean)
+      if (symbols.length) txns = txns.filter(t => symbols.includes(t.symbol))
+    }
+    return txns
+  }, [allTxns, dateFrom, dateTo, symbolFilter])
+
+  const holdings = useMemo(() => calculateHoldings(filtered), [filtered])
+  const summary = useMemo(() => calculateSummary(holdings), [holdings])
 
   if (!supabase) return <p className="text-gray-500 text-center mt-10">Connect Supabase to see holdings</p>
   if (loading) return <p className="text-gray-500 text-center mt-10">Loading...</p>
 
   return (
     <div className="space-y-4">
+      {/* Filters */}
+      <div className="bg-gray-900 rounded-xl p-4 space-y-3">
+        <p className="text-sm text-gray-400 font-medium">Filters</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-gray-500">From</label>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+              className="w-full bg-gray-800 rounded px-2 py-1.5 text-sm mt-1" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500">To</label>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+              className="w-full bg-gray-800 rounded px-2 py-1.5 text-sm mt-1" />
+          </div>
+        </div>
+        <div>
+          <label className="text-xs text-gray-500">Symbols (comma-separated)</label>
+          <input type="text" placeholder="RELIANCE, TCS, INFY" value={symbolFilter}
+            onChange={e => setSymbolFilter(e.target.value)}
+            className="w-full bg-gray-800 rounded px-2 py-1.5 text-sm mt-1" />
+        </div>
+        <p className="text-xs text-gray-600">
+          Showing {filtered.length} of {allTxns.length} transactions
+        </p>
+      </div>
+
+      {/* Summary */}
       <div className="bg-gray-900 rounded-xl p-4">
         <div className="flex justify-between items-center mb-1">
           <p className="text-sm text-gray-400">Total Invested</p>
@@ -40,7 +79,7 @@ export default function Holdings() {
       <h2 className="text-lg font-semibold">Current Holdings</h2>
 
       {holdings.length === 0 && (
-        <p className="text-gray-500 text-center py-10">No holdings yet. Add transactions to build your portfolio.</p>
+        <p className="text-gray-500 text-center py-10">No holdings match the current filters.</p>
       )}
 
       <div className="space-y-2">
