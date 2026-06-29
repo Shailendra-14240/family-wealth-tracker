@@ -17,6 +17,7 @@ export default function Transactions() {
   const fileRef = useRef()
   const [broker, setBroker] = useState('')
   const [csvAccountId, setCsvAccountId] = useState('')
+  const [filterAccountId, setFilterAccountId] = useState('')
   const [parsed, setParsed] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [form, setForm] = useState({
@@ -185,8 +186,16 @@ export default function Transactions() {
         </form>
       )}
 
+      <div className="flex gap-2 mb-2">
+        <select value={filterAccountId} onChange={(e) => setFilterAccountId(e.target.value)} className="bg-gray-800 rounded px-3 py-1.5 text-sm flex-1">
+          <option value="">All accounts</option>
+          {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+        <p className="text-sm text-gray-500 self-center">{txns.length} total</p>
+      </div>
+
       <div className="space-y-2">
-        {txns.map((t) => (
+        {(filterAccountId ? txns.filter(t => t.account_id === Number(filterAccountId)) : txns).map((t) => (
           <div key={t.id} className="bg-gray-900 rounded-xl p-4">
             <div className="flex justify-between items-center">
               <div>
