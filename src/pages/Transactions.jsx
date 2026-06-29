@@ -1,11 +1,23 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { detectFormat, parseCSV } from '../lib/csvParser'
+
+const BROKERS = [
+  { id: '', label: 'Auto-detect' },
+  { id: 'zerodha', label: 'Zerodha Kite' },
+  { id: 'paytm', label: 'Paytm Money' },
+  { id: 'icici', label: 'ICICI Direct' },
+  { id: 'generic', label: 'Generic' },
+]
 
 export default function Transactions() {
   const [txns, setTxns] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const fileRef = useRef()
+  const [broker, setBroker] = useState('')
+  const [parsed, setParsed] = useState(null)
+  const [uploading, setUploading] = useState(false)
   const [form, setForm] = useState({
     date: new Date().toISOString().split('T')[0],
     type: 'buy',
@@ -46,26 +58,28 @@ export default function Transactions() {
     }
   }
 
-  const handleCsvUpload = async (e) => {
+  const handleFileSelect = (e) => {
     const file = fileRef.current?.files?.[0]
-    if (!file || !supabase) return
+    if (!file) return
     const reader = new FileReader()
-    reader.onload = async (evt) => {
-      const lines = evt.target.result.split('\n').filter(Boolean)
-      const rows = lines.slice(1).map((line) => {
-        const cols = line.split(',')
-        return {
-          date: cols[0]?.trim() || new Date().toISOString().split('T')[0],
-          type: cols[1]?.trim().toLowerCase() === 'sell' ? 'sell' : 'buy',
-          symbol: cols[2]?.trim(),
-          qty: Number(cols[3]),
-          price: Number(cols[4]),
-        }
-      }).filter(r => r.symbol)
-      const { data } = await supabase.from('transactions').insert(rows).select('*, accounts(name)')
-      if (data) setTxns([...data, ...txns])
+    reader.onload = (evt) => {
+      const text = evt.target.result
+      const result = parseCSV(text, broker || null)
+      setParsed(result)
     }
     reader.readAsText(file)
+  }
+
+  const handleConfirmUpload = async () => {
+    if (!parsed || !parsed.rows.length || !supabase) return
+    setUploading(true)
+    const { data, error } = await supabase.from('transactions').insert(parsed.rows).select('*, accounts(name)')
+    if (data) {
+      setTxns([...data, ...txns])
+      setParsed(null)
+      fileRef.current.value = ''
+    }
+    setUploading(false)
   }
 
   if (!supabase) return <p className="text-gray-500 text-center mt-10">Connect Supabase to add transactions</p>
@@ -80,8 +94,71 @@ export default function Transactions() {
 
       <div className="bg-gray-900 rounded-xl p-4">
         <p className="text-sm text-gray-400 mb-2">Upload trade history (CSV)</p>
-        <p className="text-xs text-gray-600 mb-2">Format: date,type,symbol,qty,price</p>
-        <input ref={fileRef} type="file" accept=".csv" onChange={handleCsvUpload} className="text-sm text-gray-400 file:mr-3 file:bg-blue-600 file:text-white file:border-0 file:rounded file:px-3 file:py-1" />
+        <div className="flex gap-2 mb-3">
+          <select
+            value={broker}
+            onChange={(e) => setBroker(e.target.value)}
+            className="bg-gray-800 rounded px-3 py-1.5 text-sm flex-1"
+          >
+            {BROKERS.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
+          </select>
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".csv"
+          onChange={handleFileSelect}
+          className="text-sm text-gray-400 file:mr-3 file:bg-blue-600 file:text-white file:border-0 file:rounded file:px-3 file:py-1"
+        />
+
+        {parsed && (
+          <div className="mt-3 space-y-2">
+            <p className="text-xs text-gray-500">Detected format: <span className="text-gray-300">{parsed.format}</span></p>
+
+            {parsed.missingColumns && (
+              <p className="text-xs text-yellow-400">
+                Could not find columns: {parsed.missingColumns.join(', ')}. Fill them manually or try a different format.
+              </p>
+            )}
+
+            <p className="text-xs text-gray-500">
+              {parsed.rows.length} valid rows, {parsed.errors.length} errors
+            </p>
+
+            {parsed.rows.length > 0 && (
+              <>
+                <div className="max-h-40 overflow-y-auto space-y-1 bg-gray-800 rounded p-2">
+                  {parsed.rows.slice(0, 10).map((r, i) => (
+                    <div key={i} className="text-xs flex gap-3 text-gray-300">
+                      <span className="w-20 text-gray-500">{r.date}</span>
+                      <span className="w-8 text-gray-500">{r.type.toUpperCase()}</span>
+                      <span className="w-20 font-medium">{r.symbol}</span>
+                      <span className="w-12 text-right">{r.qty}</span>
+                      <span className="w-16 text-right">@{Number(r.price).toLocaleString()}</span>
+                    </div>
+                  ))}
+                  {parsed.rows.length > 10 && (
+                    <p className="text-xs text-gray-600">...and {parsed.rows.length - 10} more</p>
+                  )}
+                </div>
+
+                <button
+                  onClick={handleConfirmUpload}
+                  disabled={uploading}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm w-full"
+                >
+                  {uploading ? 'Uploading...' : `Upload ${parsed.rows.length} transactions`}
+                </button>
+              </>
+            )}
+
+            {parsed.errors.length > 0 && (
+              <div className="text-xs text-red-400 max-h-20 overflow-y-auto">
+                {parsed.errors.map((e, i) => <p key={i}>{e}</p>)}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {showForm && (
