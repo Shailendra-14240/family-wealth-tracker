@@ -1,0 +1,137 @@
+import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
+
+const ACTION_TYPES = [
+  { id: 'bonus', label: 'Bonus', desc: 'e.g. 1:1 = get 1 free share per share held' },
+  { id: 'split', label: 'Split', desc: 'e.g. 10:1 = 1 share becomes 10' },
+  { id: 'merger', label: 'Merger', desc: 'e.g. IDFC → IDFCFIRSTB' },
+]
+
+export default function CorporateActions() {
+  const [actions, setActions] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm] = useState({
+    date: new Date().toISOString().split('T')[0],
+    action: 'bonus',
+    symbol: '',
+    new_symbol: '',
+    ratio_from: '1',
+    ratio_to: '1',
+    notes: '',
+  })
+
+  useEffect(() => {
+    if (!supabase) return
+    supabase.from('corporate_actions').select('*').order('date', { ascending: false }).then(({ data }) => {
+      if (data) setActions(data)
+      setLoading(false)
+    })
+  }, [])
+
+  const handleAdd = async (e) => {
+    e.preventDefault()
+    if (!form.symbol || !supabase) return
+    const payload = {
+      date: form.date,
+      action: form.action,
+      symbol: form.symbol.toUpperCase().replace(/#/g, '').replace(/\d+$/, ''),
+      ratio_from: Number(form.ratio_from),
+      ratio_to: Number(form.ratio_to),
+      notes: form.notes || null,
+    }
+    if (form.action === 'merger') {
+      if (!form.new_symbol) return
+      payload.new_symbol = form.new_symbol.toUpperCase().replace(/#/g, '').replace(/\d+$/, '')
+    }
+    const { data } = await supabase.from('corporate_actions').insert(payload).select().single()
+    if (data) {
+      setActions([data, ...actions])
+      setForm({ date: new Date().toISOString().split('T')[0], action: 'bonus', symbol: '', new_symbol: '', ratio_from: '1', ratio_to: '1', notes: '' })
+      setShowForm(false)
+    }
+  }
+
+  const handleDelete = async (id) => {
+    await supabase.from('corporate_actions').delete().eq('id', id)
+    setActions(actions.filter(a => a.id !== id))
+  }
+
+  if (!supabase) return <p className="text-gray-500 text-center mt-10">Connect Supabase</p>
+  if (loading) return <p className="text-gray-500 text-center mt-10">Loading...</p>
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-lg font-semibold">Corporate Actions</h2>
+        <button onClick={() => setShowForm(!showForm)} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm">+ Add</button>
+      </div>
+
+      {showForm && (
+        <form onSubmit={handleAdd} className="bg-gray-900 rounded-xl p-4 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-gray-500">Date</label>
+              <input type="date" className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500">Type</label>
+              <select className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1" value={form.action} onChange={e => setForm({ ...form, action: e.target.value })}>
+                {ACTION_TYPES.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {ACTION_TYPES.find(a => a.id === form.action)?.desc && (
+            <p className="text-xs text-gray-500">{ACTION_TYPES.find(a => a.id === form.action).desc}</p>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-gray-500">Symbol</label>
+              <input placeholder="RELIANCE" className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1" value={form.symbol} onChange={e => setForm({ ...form, symbol: e.target.value.toUpperCase() })} />
+            </div>
+            {form.action === 'merger' && (
+              <div>
+                <label className="text-xs text-gray-500">New Symbol</label>
+                <input placeholder="IDFCFIRSTB" className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1" value={form.new_symbol} onChange={e => setForm({ ...form, new_symbol: e.target.value.toUpperCase() })} />
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-gray-500">Ratio From</label>
+              <input type="number" step="0.0001" className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1" value={form.ratio_from} onChange={e => setForm({ ...form, ratio_from: e.target.value })} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500">Ratio To</label>
+              <input type="number" step="0.0001" className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1" value={form.ratio_to} onChange={e => setForm({ ...form, ratio_to: e.target.value })} />
+            </div>
+          </div>
+
+          <input placeholder="Notes (optional)" className="w-full bg-gray-800 rounded px-3 py-2 text-sm" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+          <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm">Save</button>
+        </form>
+      )}
+
+      <div className="space-y-2">
+        {actions.map((a) => (
+          <div key={a.id} className="bg-gray-900 rounded-xl p-4">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="font-semibold capitalize">{a.action}</p>
+                <p className="text-xs text-gray-500">
+                  {a.symbol}{a.new_symbol ? ` → ${a.new_symbol}` : ''} &middot; {a.ratio_from}:{a.ratio_to} &middot; {a.date}
+                </p>
+                {a.notes && <p className="text-xs text-gray-600">{a.notes}</p>}
+              </div>
+              <button onClick={() => handleDelete(a.id)} className="text-red-400 text-xs">Delete</button>
+            </div>
+          </div>
+        ))}
+        {actions.length === 0 && <p className="text-gray-500 text-center py-10">No corporate actions added yet.</p>}
+      </div>
+    </div>
+  )
+}

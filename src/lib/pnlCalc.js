@@ -1,28 +1,68 @@
-// FIFO P&L calculation engine
-// Takes transactions sorted by date, returns holdings with cost basis and P&L
+// FIFO P&L calculation engine with corporate actions support
 
-export function calculateHoldings(transactions) {
-  const symbols = [...new Set(transactions.map(t => t.symbol))]
+function applyActionsToLots(lots, action) {
+  const { action: type, ratio_from, ratio_to, date } = action
+  const factor = ratio_to / ratio_from
+
+  if (type === 'bonus') {
+    for (const lot of lots) lot.qty *= (1 + factor)
+  } else if (type === 'split') {
+    for (const lot of lots) {
+      lot.qty *= factor
+      lot.price /= factor
+    }
+  }
+  // merger is handled at the symbol level (rename)
+}
+
+export function calculateHoldings(transactions, corporateActions = []) {
+  if (!transactions.length) return []
+
+  // 1. Build a working copy
+  const allTxns = transactions.map(t => ({ ...t }))
+
+  // 2. Apply mergers: rename symbol before processing
+  const mergers = corporateActions.filter(a => a.action === 'merger')
+  for (const m of mergers) {
+    const mergeDate = new Date(m.date).getTime()
+    for (const t of allTxns) {
+      if (t.symbol === m.symbol && new Date(t.date).getTime() < mergeDate) {
+        t.symbol = m.new_symbol
+      }
+    }
+  }
+
+  // 3. Group by symbol
+  const symbols = [...new Set(allTxns.map(t => t.symbol))]
   const holdings = []
 
   for (const symbol of symbols) {
-    const txns = transactions
+    const txns = allTxns
       .filter(t => t.symbol === symbol)
       .sort((a, b) => new Date(a.date) - new Date(b.date))
 
-    const buyLots = []          // [{ qty, price }]
-    let realizedPnl = 0
-    let totalBuyValue = 0
-    let totalBuyQty = 0
+    const actions = corporateActions
+      .filter(a => a.symbol === symbol)
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
 
+    const buyLots = []
+    let realizedPnl = 0
+
+    let actionIdx = 0
     for (const t of txns) {
+      const tDate = new Date(t.date).getTime()
+
+      // Apply any pending corporate actions before this transaction
+      while (actionIdx < actions.length && new Date(actions[actionIdx].date).getTime() <= tDate) {
+        applyActionsToLots(buyLots, actions[actionIdx])
+        actionIdx++
+      }
+
       const qty = Number(t.qty)
       const price = Number(t.price)
 
       if (t.type === 'buy') {
         buyLots.push({ qty, price })
-        totalBuyValue += qty * price
-        totalBuyQty += qty
       } else if (t.type === 'sell') {
         let remaining = qty
         while (remaining > 0 && buyLots.length > 0) {
@@ -33,13 +73,13 @@ export function calculateHoldings(transactions) {
           remaining -= matched
           if (lot.qty === 0) buyLots.shift()
         }
-        // matched qty from sell reduces total buy qty
-        const matchedQty = qty - remaining
-        totalBuyQty -= matchedQty
-        // reduce totalBuyValue proportionally
-        const avgCost = totalBuyQty > 0 ? totalBuyValue / (totalBuyQty + matchedQty) : 0
-        totalBuyValue -= matchedQty * avgCost
       }
+    }
+
+    // Apply any remaining corporate actions after all transactions
+    while (actionIdx < actions.length) {
+      applyActionsToLots(buyLots, actions[actionIdx])
+      actionIdx++
     }
 
     const currentQty = buyLots.reduce((s, l) => s + l.qty, 0)
@@ -50,7 +90,7 @@ export function calculateHoldings(transactions) {
 
     holdings.push({
       symbol,
-      qty: currentQty,
+      qty: Math.round(currentQty),
       avgCost: Math.round(avgCost * 100) / 100,
       invested: Math.round(invested * 100) / 100,
       realizedPnl: Math.round(realizedPnl * 100) / 100,
@@ -60,7 +100,6 @@ export function calculateHoldings(transactions) {
   return holdings.filter(h => h.qty > 0)
 }
 
-// For the dashboard: total summary
 export function calculateSummary(holdings) {
   const totalInvested = holdings.reduce((s, h) => s + h.invested, 0)
   const totalRealizedPnl = holdings.reduce((s, h) => s + h.realizedPnl, 0)

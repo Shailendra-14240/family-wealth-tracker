@@ -34,6 +34,18 @@ create table transactions (
 
 create unique index idx_transactions_order_id on transactions(order_id) where order_id is not null;
 
+create table corporate_actions (
+  id          bigint generated always as identity primary key,
+  date        date not null,
+  action      text not null check (action in ('bonus', 'split', 'merger')),
+  symbol      text not null,
+  new_symbol  text,                          -- for merger
+  ratio_from  numeric(12,4) not null,        -- e.g. 1 for 1:1 bonus
+  ratio_to    numeric(12,4) not null,         -- e.g. 1 for 1:1 bonus
+  notes       text,
+  created_at  timestamptz default now()
+);
+
 create table net_worth_snapshots (
   id          bigint generated always as identity primary key,
   date        date not null default current_date,

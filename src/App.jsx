@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import Accounts from './pages/Accounts'
 import Holdings from './pages/Holdings'
 import Transactions from './pages/Transactions'
+import CorporateActions from './pages/CorporateActions'
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
         <Route path="/accounts" element={<Accounts />} />
         <Route path="/holdings" element={<Holdings />} />
         <Route path="/transactions" element={<Transactions />} />
+        <Route path="/corporate-actions" element={<CorporateActions />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

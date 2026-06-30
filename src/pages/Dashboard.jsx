@@ -4,6 +4,7 @@ import { calculateHoldings, calculateSummary } from '../lib/pnlCalc'
 
 export default function Dashboard() {
   const [accounts, setAccounts] = useState([])
+  const [allActions, setAllActions] = useState([])
   const [summary, setSummary] = useState({ totalInvested: 0, totalRealizedPnl: 0 })
   const [loading, setLoading] = useState(true)
 
@@ -12,10 +13,11 @@ export default function Dashboard() {
     Promise.all([
       supabase.from('accounts').select('*'),
       supabase.from('transactions').select('*'),
-    ]).then(([acctRes, txnRes]) => {
+      supabase.from('corporate_actions').select('*'),
+    ]).then(([acctRes, txnRes, actRes]) => {
       if (acctRes.data) setAccounts(acctRes.data)
       if (txnRes.data && txnRes.data.length) {
-        const h = calculateHoldings(txnRes.data)
+        const h = calculateHoldings(txnRes.data, actRes.data || [])
         setSummary(calculateSummary(h))
       }
       setLoading(false)

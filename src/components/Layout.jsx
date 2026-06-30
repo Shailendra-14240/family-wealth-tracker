@@ -5,6 +5,7 @@ const navItems = [
   { to: '/accounts', label: 'Accounts', icon: '🏦' },
   { to: '/holdings', label: 'Holdings', icon: '📈' },
   { to: '/transactions', label: 'Transactions', icon: '📋' },
+  { to: '/corporate-actions', label: 'Actions', icon: '🔄' },
 ]
 
 export default function Layout({ children }) {

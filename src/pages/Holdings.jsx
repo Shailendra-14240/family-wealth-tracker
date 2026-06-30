@@ -4,6 +4,7 @@ import { calculateHoldings, calculateSummary } from '../lib/pnlCalc'
 
 export default function Holdings() {
   const [allTxns, setAllTxns] = useState([])
+  const [allActions, setAllActions] = useState([])
   const [loading, setLoading] = useState(true)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -11,8 +12,12 @@ export default function Holdings() {
 
   useEffect(() => {
     if (!supabase) return
-    supabase.from('transactions').select('*').order('date').then(({ data }) => {
-      if (data) setAllTxns(data)
+    Promise.all([
+      supabase.from('transactions').select('*').order('date'),
+      supabase.from('corporate_actions').select('*'),
+    ]).then(([txnRes, actRes]) => {
+      if (txnRes.data) setAllTxns(txnRes.data)
+      if (actRes.data) setAllActions(actRes.data)
       setLoading(false)
     })
   }, [])
@@ -28,7 +33,7 @@ export default function Holdings() {
     return txns
   }, [allTxns, dateFrom, dateTo, symbolFilter])
 
-  const holdings = useMemo(() => calculateHoldings(filtered), [filtered])
+  const holdings = useMemo(() => calculateHoldings(filtered, allActions), [filtered, allActions])
   const summary = useMemo(() => calculateSummary(holdings), [holdings])
 
   if (!supabase) return <p className="text-gray-500 text-center mt-10">Connect Supabase to see holdings</p>
