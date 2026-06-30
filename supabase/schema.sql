@@ -42,6 +42,7 @@ create table corporate_actions (
   new_symbol  text,                          -- for merger
   ratio_from  numeric(12,4) not null,        -- e.g. 1 for 1:1 bonus
   ratio_to    numeric(12,4) not null,         -- e.g. 1 for 1:1 bonus
+  retained_ratio numeric(12,4),          -- for demerger: parent shares retained per ratio_from (0 = complete)
   notes       text,
   created_at  timestamptz default now()
 );

@@ -23,6 +23,7 @@ export default function CorporateActions() {
     new_symbol: '',
     ratio_from: '1',
     ratio_to: '1',
+    retained_ratio: '',
     notes: '',
   })
 
@@ -49,10 +50,13 @@ export default function CorporateActions() {
       if (!form.new_symbol) return
       payload.new_symbol = form.new_symbol.toUpperCase().replace(/#/g, '').replace(/\d+$/, '')
     }
+    if (form.action === 'demerger' && form.retained_ratio !== '') {
+      payload.retained_ratio = Number(form.retained_ratio)
+    }
     const { data } = await supabase.from('corporate_actions').insert(payload).select().single()
     if (data) {
       setActions([data, ...actions])
-      setForm({ date: new Date().toISOString().split('T')[0], action: 'bonus', symbol: '', new_symbol: '', ratio_from: '1', ratio_to: '1', notes: '' })
+      setForm({ date: new Date().toISOString().split('T')[0], action: 'bonus', symbol: '', new_symbol: '', ratio_from: '1', ratio_to: '1', retained_ratio: '', notes: '' })
       setShowForm(false)
     }
   }
@@ -114,6 +118,13 @@ export default function CorporateActions() {
               <input type="number" step="0.0001" className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1" value={form.ratio_to} onChange={e => setForm({ ...form, ratio_to: e.target.value })} />
             </div>
           </div>
+
+          {form.action === 'demerger' && (
+            <div>
+              <label className="text-xs text-gray-500">Retained Ratio <span className="text-gray-600">(parent shares kept per {form.ratio_from} old shares; 0 if company ceases)</span></label>
+              <input type="number" step="0.0001" className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1" value={form.retained_ratio} onChange={e => setForm({ ...form, retained_ratio: e.target.value })} placeholder="0" />
+            </div>
+          )}
 
           <input placeholder="Notes (optional)" className="w-full bg-gray-800 rounded px-3 py-2 text-sm" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
           <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm">Save</button>

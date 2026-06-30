@@ -74,18 +74,15 @@ export function calculateHoldings(transactions, corporateActions = []) {
     } else if (type === 'demerger') {
       const oldLots = lots[symbol] || []
       const children = evt.children
+      const retainedRatio = Number(children[0].retained_ratio != null ? children[0].retained_ratio : children[0].ratio_from)
       const totalChildRatio = children.reduce((s, c) => s + Number(c.ratio_to), 0)
-      const totalRatio = Number(children[0].ratio_from) + totalChildRatio
-      const newLotsMap = {}
-      for (const child of children) {
-        newLotsMap[child.new_symbol] = Number(child.ratio_to)
-      }
+      const totalRatio = retainedRatio + totalChildRatio
       const newLotsToAdd = {}
-      for (const sym of Object.keys(newLotsMap)) newLotsToAdd[sym] = []
+      for (const child of children) newLotsToAdd[child.new_symbol] = []
 
       for (const lot of oldLots) {
         const oldQty = lot.qty
-        lot.qty *= Number(children[0].ratio_from) / totalRatio
+        lot.qty *= retainedRatio / totalRatio
         for (const child of children) {
           const childQty = oldQty * Number(child.ratio_to) / totalRatio
           if (childQty > 0) {
