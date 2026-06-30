@@ -129,99 +129,117 @@ export function calculateLotWisePnl(transactions, corporateActions = []) {
   const allSymbols = [...new Set([...allTxns.map(t => t.symbol), ...demergerTargetSymbols])]
   const events = buildEvents(allTxns, corporateActions, demergerMap)
 
-  const result = []
+  // Global state across all symbols
+  const lots = {}
+  const lotRecords = {}
+  for (const sym of allSymbols) {
+    lots[sym] = []
+    lotRecords[sym] = []
+  }
 
-  for (const symbol of allSymbols) {
-    const symbolEvents = events.filter(e => e.symbol === symbol)
-    const lots = []
-    const lotRecords = []
+  for (const evt of events) {
+    const { type, symbol } = evt
+    const symLots = lots[symbol] || []
+    const symRecords = lotRecords[symbol] || []
 
-    for (const evt of symbolEvents) {
-      if (evt.type === 'bonus') {
-        const factor = evt.ratio_to / evt.ratio_from
-        for (const lot of lots) {
-          lot.qty *= (1 + factor)
-          for (const r of lotRecords) {
-            if (r.buyDate === lot.buyDate && r.buyPrice === lot.buyPrice) {
-              r.originalQty = (r.originalQty || r.buyQty) * (1 + factor)
-              r.buyQty *= (1 + factor)
-            }
-          }
-        }
-      } else if (evt.type === 'split') {
-        const factor = evt.ratio_to / evt.ratio_from
-        for (const lot of lots) {
-          lot.qty *= factor
-          lot.price /= factor
-          for (const r of lotRecords) {
-            if (r.buyDate === lot.buyDate && r.buyPrice === lot.buyPrice) {
-              r.originalQty = (r.originalQty || r.buyQty) * factor
-              r.buyQty *= factor
-              r.buyPrice /= factor
-            }
-          }
-        }
-      } else if (evt.type === 'demerger') {
-        const children = evt.children
-        const retainedRatio = Number(children[0].retained_ratio != null ? children[0].retained_ratio : children[0].ratio_from)
-        const totalChildRatio = children.reduce((s, c) => s + Number(c.ratio_to), 0)
-        const totalRatio = retainedRatio + totalChildRatio
-        const newLotsToAdd = {}
-        for (const child of children) newLotsToAdd[child.new_symbol] = []
+    if (type === 'bonus') {
+      const factor = evt.ratio_to / evt.ratio_from
+      for (const lot of symLots) lot.qty *= (1 + factor)
+      for (const r of symRecords) {
+        r.originalQty = (r.originalQty || r.buyQty) * (1 + factor)
+        r.buyQty *= (1 + factor)
+      }
+    } else if (type === 'split') {
+      const factor = evt.ratio_to / evt.ratio_from
+      for (const lot of symLots) {
+        lot.qty *= factor
+        lot.price /= factor
+      }
+      for (const r of symRecords) {
+        r.originalQty = (r.originalQty || r.buyQty) * factor
+        r.buyQty *= factor
+        r.buyPrice /= factor
+      }
+    } else if (type === 'demerger') {
+      const children = evt.children
+      const retainedRatio = Number(children[0].retained_ratio != null ? children[0].retained_ratio : children[0].ratio_from)
+      const totalChildRatio = children.reduce((s, c) => s + Number(c.ratio_to), 0)
+      const totalRatio = retainedRatio + totalChildRatio
+      const oldLots = lots[symbol] || []
+      const oldRecords = lotRecords[symbol] || []
 
-        for (const lot of lots) {
-          const oldQty = lot.qty
-          lot.qty *= retainedRatio / totalRatio
-          for (const r of lotRecords) {
-            if (r.buyDate === lot.buyDate && r.buyPrice === lot.buyPrice) {
-              r.buyQty = r.buyQty * retainedRatio / totalRatio
+      for (let i = 0; i < oldLots.length; i++) {
+        const lot = oldLots[i]
+        const oldQty = lot.qty
+        lot.qty *= retainedRatio / totalRatio
+
+        const rec = oldRecords[i]
+        if (rec) rec.buyQty = rec.buyQty * retainedRatio / totalRatio
+
+        for (const child of children) {
+          const childQty = oldQty * Number(child.ratio_to) / totalRatio
+          if (childQty > 0) {
+            if (!lots[child.new_symbol]) {
+              lots[child.new_symbol] = []
+              lotRecords[child.new_symbol] = []
             }
-          }
-          for (const child of children) {
-            const childQty = oldQty * Number(child.ratio_to) / totalRatio
-            if (childQty > 0) {
-              newLotsToAdd[child.new_symbol].push({ qty: childQty, price: lot.price, buyDate: lot.buyDate })
-            }
-          }
-        }
-        for (const [sym, childLots] of Object.entries(newLotsToAdd)) {
-          for (const cl of childLots) {
-            lots.push({ qty: cl.qty, price: cl.price, buyDate: cl.buyDate })
-            lotRecords.push({ buyDate: cl.buyDate, buyQty: cl.qty, buyPrice: cl.price, originalQty: cl.qty, sells: [], symbol: sym })
-          }
-        }
-      } else if (evt.type === 'buy') {
-        lots.push({ qty: evt.qty, price: evt.price, buyDate: evt.date })
-        lotRecords.push({ buyDate: evt.date, buyQty: evt.qty, buyPrice: evt.price, originalQty: evt.qty, sells: [] })
-      } else if (evt.type === 'sell') {
-        let remaining = evt.qty
-        while (remaining > 0 && lots.length > 0) {
-          const lot = lots[0]
-          const matched = Math.min(remaining, lot.qty)
-          const pnl = matched * (evt.price - lot.price)
-          lotRecords[0].sells.push({ date: evt.date, qty: matched, price: evt.price, pnl })
-          lot.qty -= matched
-          remaining -= matched
-          if (lot.qty === 0) {
-            lots.shift()
-            lotRecords[0].remainingQty = 0
-          } else {
-            lotRecords[0].remainingQty = lot.qty
+            lots[child.new_symbol].push({ qty: childQty, price: lot.price, buyDate: lot.buyDate })
+            lotRecords[child.new_symbol].push({
+              buyDate: lot.buyDate,
+              buyQty: childQty,
+              buyPrice: lot.price,
+              originalQty: childQty,
+              sells: [],
+              parentSymbol: symbol,
+            })
           }
         }
       }
-    }
-
-    if (lotRecords.length > 0) {
-      result.push({ symbol, lots: lotRecords.map(l => ({
-        ...l,
-        remainingQty: l.remainingQty != null ? l.remainingQty : l.buyQty,
-        sellTotalPnl: l.sells.reduce((s, s2) => s + s2.pnl, 0),
-      })) })
+    } else if (type === 'buy') {
+      symLots.push({ qty: evt.qty, price: evt.price, buyDate: evt.date })
+      symRecords.push({ buyDate: evt.date, buyQty: evt.qty, buyPrice: evt.price, originalQty: evt.qty, sells: [] })
+    } else if (type === 'sell') {
+      let remaining = evt.qty
+      let recordIdx = 0
+      while (remaining > 0 && recordIdx < symLots.length) {
+        const lot = symLots[recordIdx]
+        const matched = Math.min(remaining, lot.qty)
+        const pnl = matched * (evt.price - lot.price)
+        symRecords[recordIdx].sells.push({ date: evt.date, qty: matched, price: evt.price, pnl })
+        lot.qty -= matched
+        remaining -= matched
+        if (lot.qty === 0) recordIdx++
+      }
+      // Remove fully consumed lots
+      if (recordIdx > 0) {
+        symLots.splice(0, recordIdx)
+        symRecords.splice(0, recordIdx)
+      }
+      // Update remainingQty on remaining lots
+      for (let i = 0; i < symLots.length; i++) {
+        symRecords[i].remainingQty = symLots[i].qty
+      }
     }
   }
 
-  return result
+  return allSymbols
+    .map(symbol => {
+      const records = lotRecords[symbol] || []
+      if (records.length === 0) return null
+      return {
+        symbol,
+        lots: records.map(r => ({
+          buyDate: r.buyDate,
+          buyQty: r.buyQty,
+          buyPrice: r.buyPrice,
+          originalQty: r.originalQty,
+          sells: r.sells,
+          remainingQty: r.remainingQty != null ? r.remainingQty : r.buyQty,
+          sellTotalPnl: r.sells.reduce((s, s2) => s + s2.pnl, 0),
+        })),
+      }
+    })
+    .filter(Boolean)
 }
 
 // Shared helpers
