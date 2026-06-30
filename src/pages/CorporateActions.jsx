@@ -4,7 +4,12 @@ import { supabase } from '../lib/supabase'
 const ACTION_TYPES = [
   { id: 'bonus', label: 'Bonus', desc: 'e.g. 1:1 = get 1 free share per share held' },
   { id: 'split', label: 'Split', desc: 'e.g. 10:1 = 1 share becomes 10' },
-  { id: 'merger', label: 'Merger', desc: 'e.g. IDFC → IDFCFIRSTB' },
+  { id: 'merger', label: 'Merger', desc: 'e.g. IDFC → IDFCFIRSTB at 1:1' },
+  {
+    id: 'demerger',
+    label: 'Demerger',
+    desc: 'One stock splits into multiple. Add one entry per child with same date & symbol. Cost basis splits proportionally.',
+  },
 ]
 
 export default function CorporateActions() {
@@ -40,7 +45,7 @@ export default function CorporateActions() {
       ratio_to: Number(form.ratio_to),
       notes: form.notes || null,
     }
-    if (form.action === 'merger') {
+    if (form.action === 'merger' || form.action === 'demerger') {
       if (!form.new_symbol) return
       payload.new_symbol = form.new_symbol.toUpperCase().replace(/#/g, '').replace(/\d+$/, '')
     }
@@ -91,10 +96,10 @@ export default function CorporateActions() {
               <label className="text-xs text-gray-500">Symbol</label>
               <input placeholder="RELIANCE" className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1" value={form.symbol} onChange={e => setForm({ ...form, symbol: e.target.value.toUpperCase() })} />
             </div>
-            {form.action === 'merger' && (
+            {(form.action === 'merger' || form.action === 'demerger') && (
               <div>
                 <label className="text-xs text-gray-500">New Symbol</label>
-                <input placeholder="IDFCFIRSTB" className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1" value={form.new_symbol} onChange={e => setForm({ ...form, new_symbol: e.target.value.toUpperCase() })} />
+                <input placeholder={form.action === 'merger' ? 'IDFCFIRSTB' : 'TMPV'} className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1" value={form.new_symbol} onChange={e => setForm({ ...form, new_symbol: e.target.value.toUpperCase() })} />
               </div>
             )}
           </div>

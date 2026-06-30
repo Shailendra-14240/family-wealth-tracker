@@ -1,28 +1,9 @@
-// FIFO P&L calculation engine with corporate actions support
-
-function applyActionsToLots(lots, action) {
-  const { action: type, ratio_from, ratio_to, date } = action
-  const factor = ratio_to / ratio_from
-
-  if (type === 'bonus') {
-    for (const lot of lots) lot.qty *= (1 + factor)
-  } else if (type === 'split') {
-    for (const lot of lots) {
-      lot.qty *= factor
-      lot.price /= factor
-    }
-  }
-  // merger is handled at the symbol level (rename)
-}
+// FIFO P&L calculation engine with corporate actions (bonus, split, merger, demerger)
 
 export function calculateHoldings(transactions, corporateActions = []) {
   if (!transactions.length) return []
-
-  // 1. Build a working copy
-  const allTxns = transactions.map(t => ({ ...t }))
-
-  // 2. Apply mergers: rename symbol before processing
-  const mergers = corporateActions.filter(a => a.action === 'merger')
+  const allTxns = [...transactions]
+  const mergers = (corporateActions || []).filter(a => a.action === 'merger')
   for (const m of mergers) {
     const mergeDate = new Date(m.date).getTime()
     for (const t of allTxns) {
@@ -32,72 +13,125 @@ export function calculateHoldings(transactions, corporateActions = []) {
     }
   }
 
-  // 3. Group by symbol
-  const symbols = [...new Set(allTxns.map(t => t.symbol))]
-  const holdings = []
+  const demergerMap = {}
+  for (const a of (corporateActions || [])) {
+    if (a.action === 'demerger') {
+      const key = `${a.date}|${a.symbol}`
+      if (!demergerMap[key]) demergerMap[key] = { date: a.date, symbol: a.symbol, children: [] }
+      demergerMap[key].children.push(a)
+    }
+  }
+  const demergerEvents = Object.values(demergerMap)
 
-  for (const symbol of symbols) {
-    const txns = allTxns
-      .filter(t => t.symbol === symbol)
-      .sort((a, b) => new Date(a.date) - new Date(b.date))
+  const demergerTargetSymbols = new Set()
+  for (const evt of demergerEvents) {
+    for (const child of evt.children) {
+      demergerTargetSymbols.add(child.new_symbol)
+    }
+  }
 
-    const actions = corporateActions
-      .filter(a => a.symbol === symbol)
-      .sort((a, b) => new Date(a.date) - new Date(b.date))
+  const allSymbols = [...new Set([...allTxns.map(t => t.symbol), ...demergerTargetSymbols])]
+  const lots = {}
+  for (const sym of allSymbols) lots[sym] = []
+  let realizedPnl = {}
 
-    const buyLots = []
-    let realizedPnl = 0
+  // Build a unified event stream: transactions + demergers + corporate actions
+  // Each event: { type: 'buy'|'sell'|'bonus'|'split'|'demerger', date, ... }
+  const events = []
 
-    let actionIdx = 0
-    for (const t of txns) {
-      const tDate = new Date(t.date).getTime()
+  for (const t of allTxns) {
+    events.push({ type: t.type, date: t.date, symbol: t.symbol, qty: Number(t.qty), price: Number(t.price) })
+  }
 
-      // Apply any pending corporate actions before this transaction
-      while (actionIdx < actions.length && new Date(actions[actionIdx].date).getTime() <= tDate) {
-        applyActionsToLots(buyLots, actions[actionIdx])
-        actionIdx++
+  for (const a of (corporateActions || [])) {
+    if (a.action === 'merger') continue
+    if (a.action === 'demerger') {
+      const key = `${a.date}|${a.symbol}`
+      if (demergerMap[key]) {
+        events.push({ type: 'demerger', date: a.date, symbol: a.symbol, children: demergerMap[key].children })
+        delete demergerMap[key]
       }
+      continue
+    }
+    events.push({ type: a.action, date: a.date, symbol: a.symbol, ratio_from: Number(a.ratio_from), ratio_to: Number(a.ratio_to) })
+  }
 
-      const qty = Number(t.qty)
-      const price = Number(t.price)
+  events.sort((a, b) => new Date(a.date) - new Date(b.date))
 
-      if (t.type === 'buy') {
-        buyLots.push({ qty, price })
-      } else if (t.type === 'sell') {
-        let remaining = qty
-        while (remaining > 0 && buyLots.length > 0) {
-          const lot = buyLots[0]
-          const matched = Math.min(remaining, lot.qty)
-          realizedPnl += matched * (price - lot.price)
-          lot.qty -= matched
-          remaining -= matched
-          if (lot.qty === 0) buyLots.shift()
+  for (const evt of events) {
+    const { type, symbol } = evt
+    const symLots = lots[symbol] || []
+
+    if (type === 'bonus') {
+      const factor = evt.ratio_to / evt.ratio_from
+      for (const lot of symLots) lot.qty *= (1 + factor)
+    } else if (type === 'split') {
+      const factor = evt.ratio_to / evt.ratio_from
+      for (const lot of symLots) {
+        lot.qty *= factor
+        lot.price /= factor
+      }
+    } else if (type === 'demerger') {
+      const oldLots = lots[symbol] || []
+      const children = evt.children
+      const totalChildRatio = children.reduce((s, c) => s + Number(c.ratio_to), 0)
+      const totalRatio = Number(children[0].ratio_from) + totalChildRatio
+      const newLotsMap = {}
+      for (const child of children) {
+        newLotsMap[child.new_symbol] = Number(child.ratio_to)
+      }
+      const newLotsToAdd = {}
+      for (const sym of Object.keys(newLotsMap)) newLotsToAdd[sym] = []
+
+      for (const lot of oldLots) {
+        const oldQty = lot.qty
+        lot.qty *= Number(children[0].ratio_from) / totalRatio
+        for (const child of children) {
+          const childQty = oldQty * Number(child.ratio_to) / totalRatio
+          if (childQty > 0) {
+            newLotsToAdd[child.new_symbol].push({ qty: childQty, price: lot.price })
+          }
         }
       }
+      for (const [sym, childLots] of Object.entries(newLotsToAdd)) {
+        if (!lots[sym]) lots[sym] = []
+        lots[sym].push(...childLots)
+      }
+    } else if (type === 'buy') {
+      symLots.push({ qty: evt.qty, price: evt.price })
+    } else if (type === 'sell') {
+      let remaining = evt.qty
+      if (!realizedPnl[symbol]) realizedPnl[symbol] = 0
+      while (remaining > 0 && symLots.length > 0) {
+        const lot = symLots[0]
+        const matched = Math.min(remaining, lot.qty)
+        realizedPnl[symbol] += matched * (evt.price - lot.price)
+        lot.qty -= matched
+        remaining -= matched
+        if (lot.qty === 0) symLots.shift()
+      }
     }
+  }
 
-    // Apply any remaining corporate actions after all transactions
-    while (actionIdx < actions.length) {
-      applyActionsToLots(buyLots, actions[actionIdx])
-      actionIdx++
-    }
-
-    const currentQty = buyLots.reduce((s, l) => s + l.qty, 0)
+  const holdings = []
+  for (const symbol of allSymbols) {
+    const symLots = lots[symbol] || []
+    const currentQty = symLots.reduce((s, l) => s + l.qty, 0)
+    if (currentQty <= 0 && !(realizedPnl[symbol])) continue
     const avgCost = currentQty > 0
-      ? buyLots.reduce((s, l) => s + l.qty * l.price, 0) / currentQty
+      ? symLots.reduce((s, l) => s + l.qty * l.price, 0) / currentQty
       : 0
     const invested = currentQty * avgCost
-
     holdings.push({
       symbol,
       qty: Math.round(currentQty),
       avgCost: Math.round(avgCost * 100) / 100,
       invested: Math.round(invested * 100) / 100,
-      realizedPnl: Math.round(realizedPnl * 100) / 100,
+      realizedPnl: Math.round((realizedPnl[symbol] || 0) * 100) / 100,
     })
   }
 
-  return holdings.filter(h => h.qty > 0)
+  return holdings
 }
 
 export function calculateSummary(holdings) {

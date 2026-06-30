@@ -37,7 +37,7 @@ create unique index idx_transactions_order_id on transactions(order_id) where or
 create table corporate_actions (
   id          bigint generated always as identity primary key,
   date        date not null,
-  action      text not null check (action in ('bonus', 'split', 'merger')),
+  action      text not null check (action in ('bonus', 'split', 'merger', 'demerger')),
   symbol      text not null,
   new_symbol  text,                          -- for merger
   ratio_from  numeric(12,4) not null,        -- e.g. 1 for 1:1 bonus
