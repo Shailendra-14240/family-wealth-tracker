@@ -65,7 +65,12 @@ function normaliseType(val) {
 
 function normaliseSymbol(val) {
   if (!val) return ''
-  return val.toString().toUpperCase().replace(/["']/g, '').trim()
+  return val.toString()
+    .toUpperCase()
+    .replace(/["']/g, '')
+    .replace(/#/g, '')
+    .replace(/\d+$/, '')
+    .trim()
 }
 
 function parseValue(val) {

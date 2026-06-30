@@ -215,7 +215,7 @@ export default function Transactions() {
               <option value="sell">Sell</option>
             </select>
           </div>
-          <input placeholder="Symbol (e.g. RELIANCE)" className="w-full bg-gray-800 rounded px-3 py-2 text-sm" value={form.symbol} onChange={(e) => setForm({ ...form, symbol: e.target.value.toUpperCase() })} />
+          <input placeholder="Symbol (e.g. RELIANCE)" className="w-full bg-gray-800 rounded px-3 py-2 text-sm" value={form.symbol} onChange={(e) => setForm({ ...form, symbol: e.target.value.toUpperCase().replace(/#/g, '').replace(/\d+$/, '') })} />
           <div className="grid grid-cols-2 gap-3">
             <input type="number" placeholder="Qty" className="bg-gray-800 rounded px-3 py-2 text-sm" value={form.qty} onChange={(e) => setForm({ ...form, qty: e.target.value })} />
             <input type="number" placeholder="Price" className="bg-gray-800 rounded px-3 py-2 text-sm" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
