@@ -200,22 +200,16 @@ export function calculateLotWisePnl(transactions, corporateActions = []) {
       symRecords.push({ buyDate: evt.date, buyQty: evt.qty, buyPrice: evt.price, originalQty: evt.qty, sells: [] })
     } else if (type === 'sell') {
       let remaining = evt.qty
-      let recordIdx = 0
-      while (remaining > 0 && recordIdx < symLots.length) {
-        const lot = symLots[recordIdx]
+      let idx = 0
+      while (remaining > 0 && idx < symLots.length) {
+        if (symLots[idx].qty === 0) { idx++; continue }
+        const lot = symLots[idx]
         const matched = Math.min(remaining, lot.qty)
         const pnl = matched * (evt.price - lot.price)
-        symRecords[recordIdx].sells.push({ date: evt.date, qty: matched, price: evt.price, pnl })
+        symRecords[idx].sells.push({ date: evt.date, qty: matched, price: evt.price, pnl })
         lot.qty -= matched
         remaining -= matched
-        if (lot.qty === 0) recordIdx++
       }
-      // Remove fully consumed lots
-      if (recordIdx > 0) {
-        symLots.splice(0, recordIdx)
-        symRecords.splice(0, recordIdx)
-      }
-      // Update remainingQty on remaining lots
       for (let i = 0; i < symLots.length; i++) {
         symRecords[i].remainingQty = symLots[i].qty
       }
