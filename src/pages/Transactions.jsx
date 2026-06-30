@@ -105,10 +105,9 @@ export default function Transactions() {
       if (error) throw new Error(error.message)
       if (data) {
         setTxns([...data, ...txns])
-        const msg = skipped > 0
-          ? `Uploaded ${rows.length} (skipped ${skipped} duplicate${skipped > 1 ? 's' : ''})`
-          : `Uploaded ${rows.length} transactions`
-        setUploadStatus({ type: 'success', msg })
+        const lines = [`✓ Added ${rows.length} new transactions`]
+        if (skipped > 0) lines.push(`↻ Skipped ${skipped} duplicate${skipped > 1 ? 's' : ''} (already exist)`)
+        setUploadStatus({ type: 'success', msg: lines.join('\n') })
         setParsed(null)
         fileRef.current.value = ''
       }
@@ -197,10 +196,10 @@ export default function Transactions() {
             )}
 
             {uploadStatus && (
-              <p className={`text-sm ${
+              <div className={`text-sm whitespace-pre-line ${
                 uploadStatus.type === 'success' ? 'text-green-400' :
                 uploadStatus.type === 'error' ? 'text-red-400' : 'text-yellow-400'
-              }`}>{uploadStatus.msg}</p>
+              }`}>{uploadStatus.msg}</div>
             )}
           </div>
         )}
