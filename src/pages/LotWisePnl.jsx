@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
-import { calculateLotWisePnl } from '../lib/pnlCalc'
+import { calculateLotWisePnl, consolidateLotRecords } from '../lib/pnlCalc'
 
 export default function LotWisePnl() {
   const [transactions, setTransactions] = useState([])
@@ -10,6 +10,7 @@ export default function LotWisePnl() {
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo, setFilterDateTo] = useState('')
   const [showClosedOnly, setShowClosedOnly] = useState(false)
+  const [doConsolidate, setDoConsolidate] = useState(true)
 
   useEffect(() => {
     if (!supabase) return
@@ -25,8 +26,9 @@ export default function LotWisePnl() {
 
   const pnlData = useMemo(() => {
     if (!transactions.length) return []
-    return calculateLotWisePnl(transactions, corpActions)
-  }, [transactions, corpActions])
+    const raw = calculateLotWisePnl(transactions, corpActions)
+    return doConsolidate ? consolidateLotRecords(raw) : raw
+  }, [transactions, corpActions, doConsolidate])
 
   const symbols = useMemo(() => pnlData.map(d => d.symbol).sort(), [pnlData])
 
@@ -61,6 +63,10 @@ export default function LotWisePnl() {
         <label className="flex items-center gap-1 text-sm text-gray-400">
           <input type="checkbox" checked={showClosedOnly} onChange={e => setShowClosedOnly(e.target.checked)} />
           Closed only
+        </label>
+        <label className="flex items-center gap-1 text-sm text-gray-400">
+          <input type="checkbox" checked={doConsolidate} onChange={e => setDoConsolidate(e.target.checked)} />
+          Group by date
         </label>
       </div>
 

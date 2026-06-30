@@ -238,6 +238,45 @@ export function calculateLotWisePnl(transactions, corporateActions = []) {
 
 // Shared helpers
 
+export function consolidateLotRecords(pnlData) {
+  return pnlData.map(group => {
+    const groups = {}
+    for (const lot of group.lots) {
+      const key = lot.buyDate
+      if (!groups[key]) groups[key] = { buyDate: lot.buyDate, buyQty: 0, buyValue: 0, sells: {}, remainingQty: 0, originalQty: 0 }
+      const g = groups[key]
+      g.buyQty += lot.buyQty
+      g.buyValue += lot.buyQty * lot.buyPrice
+      g.originalQty += lot.originalQty
+      g.remainingQty += lot.remainingQty
+      for (const s of lot.sells) {
+        const sk = s.date
+        if (!g.sells[sk]) g.sells[sk] = { date: s.date, qty: 0, value: 0, pnl: 0 }
+        g.sells[sk].qty += s.qty
+        g.sells[sk].value += s.qty * s.price
+        g.sells[sk].pnl += s.pnl
+      }
+    }
+    return {
+      symbol: group.symbol,
+      lots: Object.values(groups).map(g => ({
+        buyDate: g.buyDate,
+        buyQty: g.buyQty,
+        buyPrice: g.buyQty > 0 ? g.buyValue / g.buyQty : 0,
+        originalQty: g.originalQty,
+        remainingQty: g.remainingQty,
+        sells: Object.values(g.sells).map(s => ({
+          date: s.date,
+          qty: s.qty,
+          price: s.qty > 0 ? s.value / s.qty : 0,
+          pnl: s.pnl,
+        })).sort((a, b) => a.date.localeCompare(b.date)),
+        sellTotalPnl: Object.values(g.sells).reduce((s, s2) => s + s2.pnl, 0),
+      })).sort((a, b) => a.buyDate.localeCompare(b.buyDate)),
+    }
+  })
+}
+
 function buildEvents(allTxns, corporateActions, demergerMap) {
   const events = []
   for (const t of allTxns) {
