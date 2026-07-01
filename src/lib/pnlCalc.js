@@ -43,7 +43,10 @@ export function calculateHoldings(transactions, corporateActions = []) {
 
     if (type === 'bonus') {
       const factor = evt.ratio_to / evt.ratio_from
-      for (const lot of symLots) lot.qty *= (1 + factor)
+      for (const lot of symLots) {
+        lot.qty *= (1 + factor)
+        lot.price /= (1 + factor)
+      }
     } else if (type === 'split') {
       const factor = evt.ratio_to / evt.ratio_from
       for (const lot of symLots) {
@@ -144,10 +147,14 @@ export function calculateLotWisePnl(transactions, corporateActions = []) {
 
     if (type === 'bonus') {
       const factor = evt.ratio_to / evt.ratio_from
-      for (const lot of symLots) lot.qty *= (1 + factor)
+      for (const lot of symLots) {
+        lot.qty *= (1 + factor)
+        lot.price /= (1 + factor)
+      }
       for (const r of symRecords) {
         r.originalQty = (r.originalQty || r.buyQty) * (1 + factor)
         r.buyQty *= (1 + factor)
+        r.buyPrice /= (1 + factor)
       }
     } else if (type === 'split') {
       const factor = evt.ratio_to / evt.ratio_from
