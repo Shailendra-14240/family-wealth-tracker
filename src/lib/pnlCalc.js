@@ -9,6 +9,9 @@ export function calculateHoldings(transactions, corporateActions = []) {
     for (const t of allTxns) {
       if (t.symbol === m.symbol && new Date(t.date).getTime() < mergeDate) {
         t.symbol = m.new_symbol
+        const factor = Number(m.ratio_to) / Number(m.ratio_from)
+        t.qty *= factor
+        t.price /= factor
       }
     }
   }
@@ -111,6 +114,9 @@ export function calculateLotWisePnl(transactions, corporateActions = []) {
     for (const t of allTxns) {
       if (t.symbol === m.symbol && new Date(t.date).getTime() < mergeDate) {
         t.symbol = m.new_symbol
+        const factor = Number(m.ratio_to) / Number(m.ratio_from)
+        t.qty *= factor
+        t.price /= factor
       }
     }
   }
