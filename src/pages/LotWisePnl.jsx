@@ -33,7 +33,7 @@ export default function LotWisePnl() {
   const symbols = useMemo(() => pnlData.map(d => d.symbol).sort(), [pnlData])
 
   const filtered = useMemo(() => {
-    let data = pnlData
+    let data = pnlData.slice().sort((a, b) => a.symbol.localeCompare(b.symbol))
     if (filterSymbol) data = data.filter(d => d.symbol === filterSymbol)
     if (showClosedOnly) data = data.filter(d => d.lots.every(l => l.remainingQty === 0))
     return data.map(group => ({
