@@ -8,7 +8,8 @@ const FORMATS = [
     map: (headers) => ({
       date: headers.findIndex(h => /trade.?date/i.test(h)),
       symbol: headers.findIndex(h => /tradingsymbol|^symbol$/i.test(h)),
-      type: headers.findIndex(h => /trade_type|transaction_type/i.test(h)),
+      type: headers.findIndex(h => /^transaction.?type$|^buy.?sell$/i.test(h)),
+      trade_type: headers.findIndex(h => /^trade.?type$/i.test(h)),
       qty: headers.findIndex(h => /^quantity$/i.test(h)),
       price: headers.findIndex(h => /^price$/i.test(h) || /average.?price/i.test(h)),
       order_id: headers.findIndex(h => /^trade_id$/i.test(h)),
@@ -25,6 +26,7 @@ const FORMATS = [
       date: headers.findIndex(h => /trade.?date|date|timestamp/i.test(h)),
       symbol: headers.findIndex(h => /scrip|trading.?symbol|^symbol$/i.test(h) || /instrument/i.test(h)),
       type: headers.findIndex(h => /transaction.?type|order.?type|type|side/i.test(h)),
+      trade_type: () => -1,
       qty: headers.findIndex(h => /quantity|qty/i.test(h)),
       price: headers.findIndex(h => /avg.?price|^price$/i.test(h) || /rate|average/i.test(h)),
     }),
@@ -38,6 +40,7 @@ const FORMATS = [
       date: headers.findIndex(h => /trade.?date|date/i.test(h)),
       symbol: headers.findIndex(h => /scrip.?name|stock.?name|^symbol$/i.test(h) || /instrument/i.test(h)),
       type: headers.findIndex(h => /buy.?sell|transaction.?type|type|side/i.test(h)),
+      trade_type: () => -1,
       qty: headers.findIndex(h => /quantity|buy.?qty|sell.?qty|qty/i.test(h)),
       price: headers.findIndex(h => /avg.?price|^price$/i.test(h) || /rate/i.test(h)),
     }),
@@ -50,17 +53,26 @@ const FORMATS = [
       date: headers.findIndex(h => /date|timestamp/i.test(h)),
       symbol: headers.findIndex(h => /^symbol$|scrip|tradingsymbol|instrument|stock/i.test(h)),
       type: headers.findIndex(h => /type|side|transaction|buy.?sell/i.test(h)),
+      trade_type: () => -1,
       qty: headers.findIndex(h => /qty|quantity/i.test(h)),
       price: headers.findIndex(h => /price|rate|cost|avg/i.test(h)),
     }),
   },
 ]
 
-function normaliseType(val) {
-  if (!val) return 'buy'
-  const v = val.toString().toLowerCase().trim()
-  if (v === 'sell' || v === 's' || v.startsWith('sell')) return 'sell'
-  return 'buy'
+function normaliseType(val, tradeTypeVal) {
+  const tt = tradeTypeVal ? tradeTypeVal.toString().toLowerCase().trim() : ''
+  const isReversal = tt === 'reversal' || tt === 'reversed'
+  const isDevolement = tt === 'devolved' || tt === 'devoled'
+
+  let dir = 'buy'
+  if (val) {
+    const v = val.toString().toLowerCase().trim()
+    if (v === 'sell' || v === 's' || v.startsWith('sell')) dir = 'sell'
+  }
+
+  if (isReversal) return dir === 'sell' ? 'buy' : 'sell'
+  return dir
 }
 
 function normaliseSymbol(val) {
@@ -109,7 +121,7 @@ export function parseCSV(text, formatId) {
   if (!fmt) return { rows: [], errors: ['Could not detect CSV format'] }
 
   const colIdx = fmt.map(rawHeaders)
-  const missing = Object.entries(colIdx).filter(([, v]) => v === -1).map(([k]) => k)
+  const missing = Object.entries(colIdx).filter(([, v]) => typeof v === 'number' && v === -1).map(([k]) => k)
 
   const rows = []
   const errors = []
@@ -118,13 +130,13 @@ export function parseCSV(text, formatId) {
     const cols = lines[i].split(',').map(c => c.replace(/["']/g, '').trim())
     const raw = {}
     for (const [field, idx] of Object.entries(colIdx)) {
-      raw[field] = idx >= 0 && cols[idx] !== undefined ? cols[idx] : ''
+      raw[field] = typeof idx === 'number' && idx >= 0 && cols[idx] !== undefined ? cols[idx] : ''
     }
 
     try {
       const row = {
         symbol: normaliseSymbol(raw.symbol),
-        type: normaliseType(raw.type),
+        type: normaliseType(raw.type, raw.trade_type),
         qty: parseValue(raw.qty),
         price: parseValue(raw.price),
         date: parseDate(raw.date),
