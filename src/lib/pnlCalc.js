@@ -295,7 +295,13 @@ function buildEvents(allTxns, corporateActions, demergerMap) {
     }
     events.push({ type: a.action, date: a.date, symbol: a.symbol, ratio_from: Number(a.ratio_from), ratio_to: Number(a.ratio_to) })
   }
-  events.sort((a, b) => new Date(a.date) - new Date(b.date))
+  events.sort((a, b) => {
+    const da = new Date(a.date), db = new Date(b.date)
+    if (da - db !== 0) return da - db
+    // Same date: buys first, then corporate actions, then sells
+    const order = { buy: 0, bonus: 1, split: 2, demerger: 3, sell: 4 }
+    return (order[a.type] ?? 5) - (order[b.type] ?? 5)
+  })
   return events
 }
 
