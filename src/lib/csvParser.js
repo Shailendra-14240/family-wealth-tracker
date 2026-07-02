@@ -4,7 +4,7 @@ const FORMATS = [
     label: 'Zerodha Kite',
     detect: (headers) =>
       headers.some(h => /^symbol$/i.test(h) && /trade_date/i.test(h)) ||
-      (headers.some(h => /tradingsymbol/i.test(h)) && headers.some(h => /transaction_type/i.test(h))),
+      (headers.some(h => /tradingsymbol/i.test(h)) && (headers.some(h => /transaction_type/i.test(h)) || headers.some(h => /^trade_type$/i.test(h)))),
     map: (headers) => ({
       date: headers.findIndex(h => /trade.?date/i.test(h)),
       symbol: headers.findIndex(h => /tradingsymbol|^symbol$/i.test(h)),
@@ -63,11 +63,11 @@ const FORMATS = [
 function normaliseType(val, tradeTypeVal) {
   const tt = tradeTypeVal ? tradeTypeVal.toString().toLowerCase().trim() : ''
   const isReversal = tt === 'reversal' || tt === 'reversed'
-  const isDevolement = tt === 'devolved' || tt === 'devoled'
 
   let dir = 'buy'
-  if (val) {
-    const v = val.toString().toLowerCase().trim()
+  const source = val || tradeTypeVal
+  if (source) {
+    const v = source.toString().toLowerCase().trim()
     if (v === 'sell' || v === 's' || v.startsWith('sell')) dir = 'sell'
   }
 
