@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { calculateHoldings, calculateSummary } from '../lib/pnlCalc'
 
 export default function Dashboard() {
   const [accounts, setAccounts] = useState([])
+  const [allTxns, setAllTxns] = useState([])
   const [allActions, setAllActions] = useState([])
-  const [summary, setSummary] = useState({ totalInvested: 0, totalRealizedPnl: 0 })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -16,13 +16,31 @@ export default function Dashboard() {
       supabase.from('corporate_actions').select('*'),
     ]).then(([acctRes, txnRes, actRes]) => {
       if (acctRes.data) setAccounts(acctRes.data)
-      if (txnRes.data && txnRes.data.length) {
-        const h = calculateHoldings(txnRes.data, actRes.data || [])
-        setSummary(calculateSummary(h))
-      }
+      if (txnRes.data) setAllTxns(txnRes.data)
+      if (actRes.data) setAllActions(actRes.data)
       setLoading(false)
     })
   }, [])
+
+  const holdings = useMemo(() => {
+    if (!allTxns.length) return []
+    return calculateHoldings(allTxns, allActions)
+  }, [allTxns, allActions])
+
+  const summary = useMemo(() => calculateSummary(holdings), [holdings])
+
+  const perAccount = useMemo(() => {
+    if (!allTxns.length || !accounts.length) return []
+    return accounts
+      .map(acct => {
+        const txns = allTxns.filter(t => t.account_id === acct.id)
+        if (!txns.length) return { ...acct, invested: 0, realizedPnl: 0 }
+        const h = calculateHoldings(txns, allActions)
+        const s = calculateSummary(h)
+        return { ...acct, invested: s.totalInvested, realizedPnl: s.totalRealizedPnl }
+      })
+      .filter(a => a.invested !== 0 || a.realizedPnl !== 0 || Number(a.balance) !== 0)
+  }, [allTxns, allActions, accounts])
 
   if (!supabase) return <p className="text-gray-500 text-center mt-10">Connect Supabase to see live data</p>
   if (loading) return <p className="text-gray-500 text-center mt-10">Loading...</p>
@@ -68,15 +86,25 @@ export default function Dashboard() {
 
       <h2 className="text-lg font-semibold mt-4">Accounts</h2>
       <div className="space-y-2">
-        {accounts.map((acct) => (
-          <div key={acct.id} className="bg-gray-900 rounded-xl p-4 flex justify-between items-center">
-            <div>
-              <p className="font-medium">{acct.name}</p>
-              <p className="text-xs text-gray-500 capitalize">{acct.type}</p>
+        {perAccount.map((acct) => (
+          <div key={acct.id} className="bg-gray-900 rounded-xl p-4">
+            <div className="flex justify-between items-center mb-1">
+              <div>
+                <p className="font-medium">{acct.name}</p>
+                <p className="text-xs text-gray-500 capitalize">{acct.type}</p>
+              </div>
+              <p className={`font-semibold ${acct.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                ₹{Number(acct.balance).toLocaleString()}
+              </p>
             </div>
-            <p className={`font-semibold ${acct.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-              ₹{Number(acct.balance).toLocaleString()}
-            </p>
+            {(acct.invested !== 0 || acct.realizedPnl !== 0) && (
+              <div className="flex gap-4 text-xs text-gray-400 border-t border-gray-800 pt-1.5 mt-1">
+                <span>Invested: <span className="text-blue-400">₹{acct.invested.toLocaleString()}</span></span>
+                <span>P&L: <span className={acct.realizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}>
+                  {acct.realizedPnl >= 0 ? '+' : ''}₹{acct.realizedPnl.toLocaleString()}
+                </span></span>
+              </div>
+            )}
           </div>
         ))}
       </div>
