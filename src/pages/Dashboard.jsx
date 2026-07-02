@@ -29,20 +29,15 @@ export default function Dashboard() {
 
   const summary = useMemo(() => calculateSummary(holdings), [holdings])
 
-  const totalInvestedEver = useMemo(() => {
-    return Math.round(allTxns.filter(t => t.type === 'buy').reduce((s, t) => s + Number(t.qty) * Number(t.price), 0) * 100) / 100
-  }, [allTxns])
-
   const perAccount = useMemo(() => {
     if (!allTxns.length || !accounts.length) return []
     return accounts
       .map(acct => {
         const txns = allTxns.filter(t => t.account_id === acct.id)
         if (!txns.length) return { ...acct, invested: 0, realizedPnl: 0 }
-        const invested = Math.round(txns.filter(t => t.type === 'buy').reduce((s, t) => s + Number(t.qty) * Number(t.price), 0) * 100) / 100
         const h = calculateHoldings(txns, allActions)
         const s = calculateSummary(h)
-        return { ...acct, invested, realizedPnl: s.totalRealizedPnl }
+        return { ...acct, invested: s.totalInvested, realizedPnl: s.totalRealizedPnl }
       })
       .filter(a => a.invested !== 0 || a.realizedPnl !== 0 || Number(a.balance) !== 0)
   }, [allTxns, allActions, accounts])
