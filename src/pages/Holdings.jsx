@@ -9,6 +9,7 @@ export default function Holdings() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [symbolFilter, setSymbolFilter] = useState('')
+  const [currentOnly, setCurrentOnly] = useState(false)
 
   useEffect(() => {
     if (!supabase) return
@@ -34,6 +35,7 @@ export default function Holdings() {
   }, [allTxns, dateFrom, dateTo, symbolFilter])
 
   const holdings = useMemo(() => calculateHoldings(filtered, allActions), [filtered, allActions])
+  const displayHoldings = useMemo(() => currentOnly ? holdings.filter(h => h.qty > 0) : holdings, [holdings, currentOnly])
   const summary = useMemo(() => calculateSummary(holdings), [holdings])
 
   if (!supabase) return <p className="text-gray-500 text-center mt-10">Connect Supabase to see holdings</p>
@@ -62,6 +64,11 @@ export default function Holdings() {
             onChange={e => setSymbolFilter(e.target.value)}
             className="w-full bg-gray-800 rounded px-2 py-1.5 text-sm mt-1" />
         </div>
+        <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
+          <input type="checkbox" checked={currentOnly} onChange={e => setCurrentOnly(e.target.checked)}
+            className="accent-blue-600 w-4 h-4" />
+          Current holdings only (qty &gt; 0)
+        </label>
         <p className="text-xs text-gray-600">
           Showing {filtered.length} of {allTxns.length} transactions
         </p>
@@ -83,12 +90,12 @@ export default function Holdings() {
 
       <h2 className="text-lg font-semibold">Current Holdings</h2>
 
-      {holdings.length === 0 && (
+      {displayHoldings.length === 0 && (
         <p className="text-gray-500 text-center py-10">No holdings match the current filters.</p>
       )}
 
       <div className="space-y-2">
-        {holdings.map((h) => (
+        {displayHoldings.map((h) => (
           <div key={h.symbol} className="bg-gray-900 rounded-xl p-4">
             <div className="flex justify-between items-start">
               <div>
