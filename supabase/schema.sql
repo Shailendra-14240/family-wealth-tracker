@@ -43,6 +43,7 @@ create table corporate_actions (
   ratio_from  numeric(12,4) not null,        -- e.g. 1 for 1:1 bonus
   ratio_to    numeric(12,4) not null,         -- e.g. 1 for 1:1 bonus
   retained_ratio numeric(12,4),          -- for demerger: parent shares retained per ratio_from (0 = complete)
+  cost_share    numeric(12,4),            -- for demerger: cost apportionment weight (omit for equal split)
   notes       text,
   created_at  timestamptz default now()
 );

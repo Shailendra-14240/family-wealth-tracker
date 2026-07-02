@@ -175,33 +175,56 @@ export function calculateLotWisePnl(transactions, corporateActions = []) {
       }
     } else if (type === 'demerger') {
       const children = evt.children
-      const retainedRatio = Number(children[0].retained_ratio != null ? children[0].retained_ratio : children[0].ratio_from)
-      const totalChildRatio = children.reduce((s, c) => s + Number(c.ratio_to), 0)
-      const totalRatio = retainedRatio + totalChildRatio
+      const ratioFrom = Number(children[0].ratio_from)
+      const retainedRatio = Number(children[0].retained_ratio != null ? children[0].retained_ratio : ratioFrom)
+      const hasCostShare = children.some(c => c.cost_share != null)
       const oldLots = lots[symbol] || []
       const oldRecords = lotRecords[symbol] || []
 
       for (let i = 0; i < oldLots.length; i++) {
         const lot = oldLots[i]
         const oldQty = lot.qty
-        lot.qty *= retainedRatio / totalRatio
+        const oldTotalCost = oldQty * lot.price
+
+        // Calculate each child's qty independently
+        let totalWeight = retainedRatio
+        const childQtys = {}
+        const childWeights = {}
+        for (const child of children) {
+          const cqty = oldQty * Number(child.ratio_to) / ratioFrom
+          childQtys[child.new_symbol] = cqty
+          const w = hasCostShare ? Number(child.cost_share) : Number(child.ratio_to)
+          childWeights[child.new_symbol] = w
+          totalWeight += w
+        }
+        const retainedQty = oldQty * retainedRatio / ratioFrom
+        const costPerWeight = totalWeight > 0 ? oldTotalCost / totalWeight : 0
+
+        // Update retained lot
+        lot.qty = retainedQty
+        lot.price = retainedQty > 0 ? costPerWeight * retainedRatio / retainedQty : 0
 
         const rec = oldRecords[i]
-        if (rec) rec.buyQty = rec.buyQty * retainedRatio / totalRatio
+        if (rec) {
+          rec.buyQty = retainedQty
+          rec.buyPrice = retainedQty > 0 ? costPerWeight * retainedRatio / retainedQty : 0
+        }
 
+        // Create child lots
         for (const child of children) {
-          const childQty = oldQty * Number(child.ratio_to) / totalRatio
-          if (childQty > 0) {
+          const cqty = childQtys[child.new_symbol]
+          if (cqty > 0) {
+            const cprice = costPerWeight * childWeights[child.new_symbol] / cqty
             if (!lots[child.new_symbol]) {
               lots[child.new_symbol] = []
               lotRecords[child.new_symbol] = []
             }
-            lots[child.new_symbol].push({ qty: childQty, price: lot.price, buyDate: lot.buyDate })
+            lots[child.new_symbol].push({ qty: cqty, price: cprice, buyDate: lot.buyDate })
             lotRecords[child.new_symbol].push({
               buyDate: lot.buyDate,
-              buyQty: childQty,
-              buyPrice: lot.price,
-              originalQty: childQty,
+              buyQty: cqty,
+              buyPrice: cprice,
+              originalQty: cqty,
               sells: [],
               parentSymbol: symbol,
             })
@@ -320,19 +343,36 @@ function buildEvents(allTxns, corporateActions, demergerMap) {
 
 function processDemerger(lots, symbol, children) {
   const oldLots = lots[symbol] || []
-  const retainedRatio = Number(children[0].retained_ratio != null ? children[0].retained_ratio : children[0].ratio_from)
-  const totalChildRatio = children.reduce((s, c) => s + Number(c.ratio_to), 0)
-  const totalRatio = retainedRatio + totalChildRatio
+  const ratioFrom = Number(children[0].ratio_from)
+  const retainedRatio = Number(children[0].retained_ratio != null ? children[0].retained_ratio : ratioFrom)
+  const hasCostShare = children.some(c => c.cost_share != null)
   const newLotsToAdd = {}
   for (const child of children) newLotsToAdd[child.new_symbol] = []
 
   for (const lot of oldLots) {
     const oldQty = lot.qty
-    lot.qty *= retainedRatio / totalRatio
+    const oldTotalCost = oldQty * lot.price
+
+    let totalWeight = retainedRatio
+    const childQtys = {}
+    const childWeights = {}
     for (const child of children) {
-      const childQty = oldQty * Number(child.ratio_to) / totalRatio
-      if (childQty > 0) {
-        newLotsToAdd[child.new_symbol].push({ qty: childQty, price: lot.price })
+      const cqty = oldQty * Number(child.ratio_to) / ratioFrom
+      childQtys[child.new_symbol] = cqty
+      const w = hasCostShare ? Number(child.cost_share) : Number(child.ratio_to)
+      childWeights[child.new_symbol] = w
+      totalWeight += w
+    }
+    const retainedQty = oldQty * retainedRatio / ratioFrom
+    const costPerWeight = totalWeight > 0 ? oldTotalCost / totalWeight : 0
+
+    lot.qty = retainedQty
+    lot.price = retainedQty > 0 ? costPerWeight * retainedRatio / retainedQty : 0
+
+    for (const child of children) {
+      const cqty = childQtys[child.new_symbol]
+      if (cqty > 0) {
+        newLotsToAdd[child.new_symbol].push({ qty: cqty, price: costPerWeight * childWeights[child.new_symbol] / cqty })
       }
     }
   }

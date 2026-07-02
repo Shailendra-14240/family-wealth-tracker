@@ -24,6 +24,7 @@ export default function CorporateActions() {
     ratio_from: '1',
     ratio_to: '1',
     retained_ratio: '',
+    cost_share: '',
     notes: '',
   })
 
@@ -53,10 +54,13 @@ export default function CorporateActions() {
     if (form.action === 'demerger' && form.retained_ratio !== '') {
       payload.retained_ratio = Number(form.retained_ratio)
     }
+    if (form.action === 'demerger' && form.cost_share !== '') {
+      payload.cost_share = Number(form.cost_share)
+    }
     const { data } = await supabase.from('corporate_actions').insert(payload).select().single()
     if (data) {
       setActions([data, ...actions])
-      setForm({ date: new Date().toISOString().split('T')[0], action: 'bonus', symbol: '', new_symbol: '', ratio_from: '1', ratio_to: '1', retained_ratio: '', notes: '' })
+      setForm({ date: new Date().toISOString().split('T')[0], action: 'bonus', symbol: '', new_symbol: '', ratio_from: '1', ratio_to: '1', retained_ratio: '', cost_share: '', notes: '' })
       setShowForm(false)
     }
   }
@@ -123,6 +127,13 @@ export default function CorporateActions() {
             <div>
               <label className="text-xs text-gray-500">Retained Ratio <span className="text-gray-600">(parent shares kept per {form.ratio_from} old shares; 0 if company ceases)</span></label>
               <input type="number" step="0.0001" className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1" value={form.retained_ratio} onChange={e => setForm({ ...form, retained_ratio: e.target.value })} placeholder="0" />
+            </div>
+          )}
+
+          {form.action === 'demerger' && (
+            <div>
+              <label className="text-xs text-gray-500">Cost Share <span className="text-gray-600">(cost weight; omit for equal split)</span></label>
+              <input type="number" step="0.0001" className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1" value={form.cost_share} onChange={e => setForm({ ...form, cost_share: e.target.value })} placeholder="e.g. 0.69" />
             </div>
           )}
 
