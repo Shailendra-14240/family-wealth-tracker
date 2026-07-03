@@ -1,13 +1,14 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 
 export default function Returns() {
+  const [accounts, setAccounts] = useState([])
   const [movements, setMovements] = useState([])
   const [snapshots, setSnapshots] = useState([])
   const [loading, setLoading] = useState(true)
   const fileRef = useRef()
-
   const ledgerRef = useRef()
+  const [selectedAccount, setSelectedAccount] = useState('')
   const [fmForm, setFmForm] = useState({ date: new Date().toISOString().split('T')[0], type: 'deposit', amount: '', notes: '' })
   const [ssForm, setSsForm] = useState({ date: new Date().toISOString().split('T')[0], total_value: '', notes: '' })
   const [parsedCsv, setParsedCsv] = useState(null)
@@ -17,19 +18,28 @@ export default function Returns() {
   useEffect(() => {
     if (!supabase) return
     Promise.all([
-      supabase.from('fund_movements').select('*').order('date', { ascending: false }),
-      supabase.from('portfolio_snapshots').select('*').order('date', { ascending: false }).limit(1000000),
-    ]).then(([fmRes, ssRes]) => {
+      supabase.from('accounts').select('id, name').order('name'),
+      supabase.from('fund_movements').select('*').limit(1000000),
+      supabase.from('portfolio_snapshots').select('*').limit(1000000),
+    ]).then(([acctRes, fmRes, ssRes]) => {
+      if (acctRes.data) setAccounts(acctRes.data)
       if (fmRes.data) setMovements(fmRes.data)
       if (ssRes.data) setSnapshots(ssRes.data)
       setLoading(false)
     })
   }, [])
 
-  const totalDeposits = movements.filter(m => m.type === 'deposit').reduce((s, m) => s + Number(m.amount), 0)
-  const totalWithdrawals = movements.filter(m => m.type === 'withdrawal').reduce((s, m) => s + Number(m.amount), 0)
+  const accountFilter = (item) => !selectedAccount || Number(item.account_id) === Number(selectedAccount)
+
+  const filteredMovements = useMemo(() => movements.filter(accountFilter), [movements, selectedAccount])
+  const filteredSnapshots = useMemo(() => snapshots.filter(accountFilter), [snapshots, selectedAccount])
+
+  const totalDeposits = filteredMovements.filter(m => m.type === 'deposit').reduce((s, m) => s + Number(m.amount), 0)
+  const totalWithdrawals = filteredMovements.filter(m => m.type === 'withdrawal').reduce((s, m) => s + Number(m.amount), 0)
   const netAdded = totalDeposits - totalWithdrawals
-  const latestSnapshot = snapshots.length > 0 ? snapshots.reduce((a, b) => new Date(a.date) > new Date(b.date) ? a : b) : null
+  const latestSnapshot = filteredSnapshots.length > 0
+    ? filteredSnapshots.reduce((a, b) => new Date(a.date) > new Date(b.date) ? a : b)
+    : null
   const portfolioValue = latestSnapshot ? Number(latestSnapshot.total_value) : 0
   const totalPnl = portfolioValue - netAdded
   const returnPct = netAdded > 0 ? (totalPnl / netAdded * 100) : 0
@@ -39,7 +49,8 @@ export default function Returns() {
     if (!fmForm.amount || !supabase) return
     setAdding(true)
     const { data } = await supabase.from('fund_movements').insert({
-      date: fmForm.date, type: fmForm.type, amount: Number(fmForm.amount), notes: fmForm.notes || null,
+      date: fmForm.date, type: fmForm.type, amount: Number(fmForm.amount),
+      account_id: selectedAccount || null, notes: fmForm.notes || null,
     }).select().single()
     if (data) {
       setMovements([data, ...movements])
@@ -81,8 +92,8 @@ export default function Returns() {
     if (!parsedLedger || !supabase) return
     setAdding(true)
     const allEntries = [
-      ...parsedLedger.deposits.map(d => ({ date: d.date, type: 'deposit', amount: d.amount, notes: d.notes })),
-      ...parsedLedger.withdrawals.map(w => ({ date: w.date, type: 'withdrawal', amount: w.amount, notes: w.notes })),
+      ...parsedLedger.deposits.map(d => ({ date: d.date, type: 'deposit', amount: d.amount, account_id: selectedAccount || null, notes: d.notes })),
+      ...parsedLedger.withdrawals.map(w => ({ date: w.date, type: 'withdrawal', amount: w.amount, account_id: selectedAccount || null, notes: w.notes })),
     ]
     const { data } = await supabase.from('fund_movements').insert(allEntries).select()
     if (data) setMovements([...data, ...movements])
@@ -102,7 +113,8 @@ export default function Returns() {
     if (!ssForm.total_value || !supabase) return
     setAdding(true)
     const { data } = await supabase.from('portfolio_snapshots').insert({
-      date: ssForm.date, total_value: Number(ssForm.total_value), notes: ssForm.notes || null, method: 'manual',
+      date: ssForm.date, total_value: Number(ssForm.total_value),
+      account_id: selectedAccount || null, notes: ssForm.notes || null, method: 'manual',
     }).select().single()
     if (data) {
       setSnapshots([data, ...snapshots])
@@ -153,6 +165,15 @@ export default function Returns() {
     <div className="space-y-4">
       <h2 className="text-lg font-semibold">Returns Calculator</h2>
 
+      <div className="bg-gray-900 rounded-xl p-4">
+        <label className="text-xs text-gray-500">Account</label>
+        <select value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)}
+          className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1">
+          <option value="">All accounts</option>
+          {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+      </div>
+
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-gray-900 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-400">Deposits</p>
@@ -198,8 +219,9 @@ export default function Returns() {
           </select>
           <input type="number" placeholder="Amount" className="bg-gray-800 rounded px-2 py-1.5 text-sm w-28" value={fmForm.amount} onChange={e => setFmForm({ ...fmForm, amount: e.target.value })} />
           <input type="text" placeholder="Notes" className="bg-gray-800 rounded px-2 py-1.5 text-sm flex-1 min-w-[120px]" value={fmForm.notes} onChange={e => setFmForm({ ...fmForm, notes: e.target.value })} />
-          <button type="submit" disabled={adding} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm">Add</button>
+          <button type="submit" disabled={adding || !selectedAccount} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm">Add</button>
         </form>
+        {!selectedAccount && <p className="text-xs text-yellow-500 mt-1">Select an account first</p>}
       </div>
 
       <div className="bg-gray-900 rounded-xl p-4">
@@ -207,11 +229,12 @@ export default function Returns() {
         <p className="text-xs text-gray-600 mb-2">Auto-extracts deposits (Bank Receipts) and withdrawals (Bank Payments)</p>
         <input ref={ledgerRef} type="file" accept=".csv" onChange={handleLedgerFile}
           className="text-sm text-gray-400 file:mr-3 file:bg-purple-600 file:text-white file:border-0 file:rounded file:px-3 file:py-1" />
+        {!selectedAccount && <p className="text-xs text-yellow-500 mt-1">Select an account first before uploading ledger</p>}
         {parsedLedger && (
           <div className="mt-2 space-y-1 text-xs">
             <p className="text-green-400">{parsedLedger.deposits.length} deposits · Total: <span className="font-semibold">+₹{parsedLedger.deposits.reduce((s, d) => s + d.amount, 0).toLocaleString()}</span></p>
             <p className="text-red-400">{parsedLedger.withdrawals.length} withdrawals · Total: <span className="font-semibold">-₹{parsedLedger.withdrawals.reduce((s, w) => s + w.amount, 0).toLocaleString()}</span></p>
-            <button onClick={handleConfirmLedger} disabled={adding}
+            <button onClick={handleConfirmLedger} disabled={adding || !selectedAccount}
               className="bg-purple-600 text-white px-3 py-1 rounded text-xs mt-1">
               {adding ? 'Saving...' : `Save ${parsedLedger.deposits.length + parsedLedger.withdrawals.length} entries`}
             </button>
@@ -219,11 +242,11 @@ export default function Returns() {
         )}
       </div>
 
-      {movements.length > 0 && (
+      {filteredMovements.length > 0 && (
         <div className="bg-gray-900 rounded-xl p-4">
-          <p className="text-sm text-gray-400 mb-2">Fund Movements ({movements.length})</p>
+          <p className="text-sm text-gray-400 mb-2">Fund Movements ({filteredMovements.length})</p>
           <div className="space-y-1 max-h-48 overflow-y-auto">
-            {movements.map(m => (
+            {filteredMovements.map(m => (
               <div key={m.id} className="flex justify-between items-center text-sm py-1 border-b border-gray-800 last:border-0">
                 <span className="text-gray-500 w-24 text-xs">{m.date}</span>
                 <span className={`font-medium w-20 ${m.type === 'deposit' ? 'text-green-400' : 'text-red-400'}`}>
@@ -244,8 +267,9 @@ export default function Returns() {
           <input type="date" className="bg-gray-800 rounded px-2 py-1.5 text-sm flex-1 min-w-[120px]" value={ssForm.date} onChange={e => setSsForm({ ...ssForm, date: e.target.value })} />
           <input type="number" placeholder="Total value" className="bg-gray-800 rounded px-2 py-1.5 text-sm w-32" value={ssForm.total_value} onChange={e => setSsForm({ ...ssForm, total_value: e.target.value })} />
           <input type="text" placeholder="Notes" className="bg-gray-800 rounded px-2 py-1.5 text-sm flex-1 min-w-[120px]" value={ssForm.notes} onChange={e => setSsForm({ ...ssForm, notes: e.target.value })} />
-          <button type="submit" disabled={adding} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm">Save</button>
+          <button type="submit" disabled={adding || !selectedAccount} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm">Save</button>
         </form>
+        {!selectedAccount && <p className="text-xs text-yellow-500 -mt-2 mb-2">Select an account first</p>}
 
         <div className="border-t border-gray-800 pt-3">
           <p className="text-xs text-gray-500 mb-2">Or upload current holdings CSV to calculate total value</p>
@@ -258,23 +282,25 @@ export default function Returns() {
                 if (!supabase) return
                 setAdding(true)
                 const { data } = await supabase.from('portfolio_snapshots').insert({
-                  date: parsedCsv.date, total_value: parsedCsv.total, method: 'csv', notes: `From CSV (${parsedCsv.count} holdings)`,
+                  date: parsedCsv.date, total_value: parsedCsv.total,
+                  account_id: selectedAccount || null, method: 'csv',
+                  notes: `From CSV (${parsedCsv.count} holdings)`,
                 }).select().single()
                 if (data) setSnapshots([data, ...snapshots])
                 setAdding(false)
                 setParsedCsv(null)
                 if (fileRef.current) fileRef.current.value = ''
-              }} disabled={adding} className="bg-green-600 text-white px-3 py-1 rounded text-xs">Save snapshot</button>
+              }} disabled={adding || !selectedAccount} className="bg-green-600 text-white px-3 py-1 rounded text-xs">Save snapshot</button>
             </div>
           )}
         </div>
       </div>
 
-      {snapshots.length > 0 && (
+      {filteredSnapshots.length > 0 && (
         <div className="bg-gray-900 rounded-xl p-4">
-          <p className="text-sm text-gray-400 mb-2">Snapshots ({snapshots.length})</p>
+          <p className="text-sm text-gray-400 mb-2">Snapshots ({filteredSnapshots.length})</p>
           <div className="space-y-1 max-h-48 overflow-y-auto">
-            {snapshots.map(s => (
+            {filteredSnapshots.map(s => (
               <div key={s.id} className="flex justify-between items-center text-sm py-1 border-b border-gray-800 last:border-0">
                 <span className="text-gray-500 w-24 text-xs">{s.date}</span>
                 <span className="font-medium text-purple-400 w-28">₹{Number(s.total_value).toLocaleString()}</span>

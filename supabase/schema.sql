@@ -60,6 +60,7 @@ create table net_worth_snapshots (
 
 create table fund_movements (
   id         bigint generated always as identity primary key,
+  account_id bigint references accounts(id) on delete cascade,
   date       date not null,
   type       text not null check (type in ('deposit', 'withdrawal')),
   amount     numeric(14,2) not null,
@@ -69,6 +70,7 @@ create table fund_movements (
 
 create table portfolio_snapshots (
   id          bigint generated always as identity primary key,
+  account_id  bigint references accounts(id) on delete cascade,
   date        date not null,
   total_value numeric(14,2) not null,
   method      text default 'manual',
