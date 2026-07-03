@@ -34,27 +34,51 @@ export default function Returns() {
   }, [])
 
   const accountFilter = (item) => !selectedAccount || Number(item.account_id) === Number(selectedAccount)
+  const accountFilterNum = (id) => !selectedAccount || Number(id) === Number(selectedAccount)
 
   const filteredLedger = useMemo(() => ledgerRows.filter(accountFilter), [ledgerRows, selectedAccount])
   const filteredMovements = useMemo(() => movements.filter(accountFilter), [movements, selectedAccount])
   const filteredSnapshots = useMemo(() => snapshots.filter(accountFilter), [snapshots, selectedAccount])
 
-  // Compute from raw ledger rows
-  const ledgerDeposits = filteredLedger.filter(r => r.voucher_type === 'Bank Receipts').reduce((s, r) => s + Number(r.credit), 0)
-  const ledgerWithdrawals = filteredLedger.filter(r => r.voucher_type === 'Bank Payments').reduce((s, r) => s + Number(r.debit), 0)
+  // Per-account computation
+  const perAccount = useMemo(() => {
+    const activeIds = [...new Set([
+      ...ledgerRows.map(r => r.account_id),
+      ...movements.map(m => m.account_id),
+      ...snapshots.map(s => s.account_id),
+    ].filter(Boolean))]
+    return activeIds.map(aid => {
+      const lr = ledgerRows.filter(r => Number(r.account_id) === Number(aid))
+      const fm = movements.filter(m => Number(m.account_id) === Number(aid))
+      const ss = snapshots.filter(s => Number(s.account_id) === Number(aid))
+      const deposits = lr.filter(r => r.voucher_type === 'Bank Receipts').reduce((s, r) => s + Number(r.credit), 0)
+        + fm.filter(m => m.type === 'deposit').reduce((s, m) => s + Number(m.amount), 0)
+      const withdrawals = lr.filter(r => r.voucher_type === 'Bank Payments').reduce((s, r) => s + Number(r.debit), 0)
+        + fm.filter(m => m.type === 'withdrawal').reduce((s, m) => s + Number(m.amount), 0)
+      const latest = ss.length ? ss.reduce((a, b) => new Date(a.date) > new Date(b.date) ? a : b) : null
+      const holdingsVal = latest ? Number(latest.total_value) : 0
+      const netBalRow = lr.length ? lr.reduce((a, b) => new Date(a.date) > new Date(b.date) || (a.date === b.date && a.id > b.id) ? a : b) : null
+      const cash = netBalRow ? Number(netBalRow.net_balance) || 0 : 0
+      const netAdded = deposits - withdrawals
+      const totalValue = holdingsVal + cash
+      const pnl = totalValue - netAdded
+      return { accountId: Number(aid), deposits, withdrawals, netAdded, holdingsVal, cash, totalValue, pnl }
+    })
+  }, [ledgerRows, movements, snapshots])
 
-  // Compute from manual fund movements
-  const manualDeposits = filteredMovements.filter(m => m.type === 'deposit').reduce((s, m) => s + Number(m.amount), 0)
-  const manualWithdrawals = filteredMovements.filter(m => m.type === 'withdrawal').reduce((s, m) => s + Number(m.amount), 0)
+  // Apply account filter
+  const accountData = useMemo(() => {
+    if (!selectedAccount) return perAccount
+    return perAccount.filter(a => a.accountId === Number(selectedAccount))
+  }, [perAccount, selectedAccount])
 
-  const totalDeposits = ledgerDeposits + manualDeposits
-  const totalWithdrawals = ledgerWithdrawals + manualWithdrawals
-  const netAdded = totalDeposits - totalWithdrawals
-  const latestSnapshot = filteredSnapshots.length > 0
-    ? filteredSnapshots.reduce((a, b) => new Date(a.date) > new Date(b.date) ? a : b)
-    : null
-  const portfolioValue = latestSnapshot ? Number(latestSnapshot.total_value) : 0
-  const totalPnl = portfolioValue - netAdded
+  const totalDeposits = accountData.reduce((s, a) => s + a.deposits, 0)
+  const totalWithdrawals = accountData.reduce((s, a) => s + a.withdrawals, 0)
+  const netAdded = accountData.reduce((s, a) => s + a.netAdded, 0)
+  const totalHoldingsVal = accountData.reduce((s, a) => s + a.holdingsVal, 0)
+  const totalCash = accountData.reduce((s, a) => s + a.cash, 0)
+  const totalValue = totalHoldingsVal + totalCash
+  const totalPnl = accountData.reduce((s, a) => s + a.pnl, 0)
   const returnPct = netAdded > 0 ? (totalPnl / netAdded * 100) : 0
 
   const handleAddMovement = async (e) => {
@@ -109,9 +133,7 @@ export default function Returns() {
   const handleConfirmLedger = async () => {
     if (!parsedLedger || !supabase || !selectedAccount) return
     setUploadingLedger(true)
-    // Delete existing ledger rows for this account first
     await supabase.from('ledger_rows').delete().eq('account_id', Number(selectedAccount))
-    // Insert all rows
     const entries = parsedLedger.rows.map(r => ({
       account_id: Number(selectedAccount),
       date: r.date, voucher_type: r.voucher_type, description: r.description,
@@ -186,10 +208,10 @@ export default function Returns() {
     reader.readAsText(file)
   }
 
-  const accountLedgerRows = filteredLedger.length
-
   if (!supabase) return <p className="text-gray-500 text-center mt-10">Connect Supabase to see returns data</p>
   if (loading) return <p className="text-gray-500 text-center mt-10">Loading...</p>
+
+  const accountLedgerRows = filteredLedger.length
 
   return (
     <div className="space-y-4">
@@ -204,13 +226,14 @@ export default function Returns() {
         </select>
       </div>
 
+      {/* Row 1: Fund flow */}
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-gray-900 rounded-xl p-3 text-center">
-          <p className="text-xs text-gray-400">Deposits</p>
+          <p className="text-xs text-gray-400">Total Deposits</p>
           <p className="text-lg font-bold text-green-400">+₹{totalDeposits.toLocaleString()}</p>
         </div>
         <div className="bg-gray-900 rounded-xl p-3 text-center">
-          <p className="text-xs text-gray-400">Withdrawals</p>
+          <p className="text-xs text-gray-400">Total Withdrawals</p>
           <p className="text-lg font-bold text-red-400">-₹{totalWithdrawals.toLocaleString()}</p>
         </div>
         <div className="bg-gray-900 rounded-xl p-3 text-center">
@@ -219,36 +242,71 @@ export default function Returns() {
         </div>
       </div>
 
+      {/* Row 2: Current position */}
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-gray-900 rounded-xl p-3 text-center">
-          <p className="text-xs text-gray-400">Portfolio Value</p>
-          <p className="text-lg font-bold text-purple-400">₹{portfolioValue.toLocaleString()}</p>
-          {latestSnapshot && <p className="text-xs text-gray-600">{latestSnapshot.date}</p>}
+          <p className="text-xs text-gray-400">Holdings Value</p>
+          <p className="text-lg font-bold text-purple-400">₹{totalHoldingsVal.toLocaleString()}</p>
         </div>
         <div className="bg-gray-900 rounded-xl p-3 text-center">
+          <p className="text-xs text-gray-400">Available Cash</p>
+          <p className="text-lg font-bold text-yellow-400">₹{totalCash.toLocaleString()}</p>
+        </div>
+        <div className="bg-gray-900 rounded-xl p-3 text-center">
+          <p className="text-xs text-gray-400">Total Value</p>
+          <p className="text-lg font-bold text-white">₹{totalValue.toLocaleString()}</p>
+        </div>
+      </div>
+
+      {/* Row 3: P&L */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-gray-900 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-400">Total P&L</p>
-          <p className={`text-lg font-bold ${totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          <p className={`text-xl font-bold ${totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
             {totalPnl >= 0 ? '+' : ''}₹{totalPnl.toLocaleString()}
           </p>
         </div>
         <div className="bg-gray-900 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-400">Return %</p>
-          <p className={`text-lg font-bold ${returnPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          <p className={`text-xl font-bold ${returnPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
             {returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}%
           </p>
         </div>
       </div>
 
+      {/* Per-account breakdown (only in All view) */}
+      {!selectedAccount && accountData.length > 1 && (
+        <div className="bg-gray-900 rounded-xl p-4">
+          <p className="text-sm text-gray-400 mb-2">Per Account</p>
+          <div className="space-y-2">
+            {accountData.map(a => {
+              const acct = accounts.find(x => x.id === a.accountId)
+              return (
+                <div key={a.accountId} className="text-xs border-b border-gray-800 pb-2 last:border-0">
+                  <p className="font-medium text-gray-300 mb-1">{acct?.name || `Account #${a.accountId}`}</p>
+                  <div className="grid grid-cols-4 gap-2 text-gray-500">
+                    <span>Net: <span className="text-blue-400">₹{a.netAdded.toLocaleString()}</span></span>
+                    <span>Holdings: <span className="text-purple-400">₹{a.holdingsVal.toLocaleString()}</span></span>
+                    <span>Cash: <span className="text-yellow-400">₹{a.cash.toLocaleString()}</span></span>
+                    <span>P&L: <span className={a.pnl >= 0 ? 'text-green-400' : 'text-red-400'}>{a.pnl >= 0 ? '+' : ''}₹{a.pnl.toLocaleString()}</span></span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Ledger Upload */}
       <div className="bg-gray-900 rounded-xl p-4">
         <p className="text-sm text-gray-400 mb-2">Zerodha Ledger</p>
-        <p className="text-xs text-gray-600 mb-2">Upload the full ledger CSV — all rows saved as raw data. Deposits/withdrawals computed automatically.</p>
+        <p className="text-xs text-gray-600 mb-2">Upload the full ledger CSV — all rows saved as raw data.</p>
         {!selectedAccount && <p className="text-xs text-yellow-500 mb-2">Select an account first</p>}
         <div className="flex gap-2 items-center">
           <input ref={ledgerRef} type="file" accept=".csv" onChange={handleLedgerFile}
             className="text-sm text-gray-400 file:mr-3 file:bg-purple-600 file:text-white file:border-0 file:rounded file:px-3 file:py-1 flex-1" />
           {accountLedgerRows > 0 && (
-            <button onClick={handleDeleteLedger} className="text-red-500 text-xs hover:text-red-400">Delete</button>
+            <button onClick={handleDeleteLedger} className="text-red-500 text-xs hover:text-red-400">Delete ledger</button>
           )}
         </div>
         {parsedLedger && (
@@ -256,7 +314,7 @@ export default function Returns() {
             <p className="text-gray-400">{parsedLedger.rows.length} rows from {parsedLedger.fileName}</p>
             <p className="text-green-400">Deposits: +₹{parsedLedger.rows.filter(r => r.voucher_type === 'Bank Receipts').reduce((s, r) => s + r.credit, 0).toLocaleString()}</p>
             <p className="text-red-400">Withdrawals: -₹{parsedLedger.rows.filter(r => r.voucher_type === 'Bank Payments').reduce((s, r) => s + r.debit, 0).toLocaleString()}</p>
-            <p className="text-xs text-yellow-500">This will replace existing ledger data for this account</p>
+            <p className="text-xs text-yellow-500">Replaces existing ledger data for this account</p>
             <button onClick={handleConfirmLedger} disabled={uploadingLedger || !selectedAccount}
               className="bg-purple-600 text-white px-3 py-1 rounded text-xs mt-1">
               {uploadingLedger ? 'Saving...' : `Save ${parsedLedger.rows.length} rows`}
@@ -264,7 +322,7 @@ export default function Returns() {
           </div>
         )}
         {accountLedgerRows > 0 && !parsedLedger && (
-          <p className="text-xs text-gray-500 mt-1">{accountLedgerRows} ledger rows saved for this account</p>
+          <p className="text-xs text-gray-500 mt-1">{accountLedgerRows} rows saved</p>
         )}
       </div>
 
@@ -311,7 +369,7 @@ export default function Returns() {
         </form>
 
         <div className="border-t border-gray-800 pt-3">
-          <p className="text-xs text-gray-500 mb-2">Or upload holdings CSV (uses Cur.val column if present, else qty × price)</p>
+          <p className="text-xs text-gray-500 mb-2">Or upload holdings CSV (uses Cur.val column)</p>
           <input ref={fileRef} type="file" accept=".csv" onChange={handleCsvFile}
             className="text-sm text-gray-400 file:mr-3 file:bg-green-600 file:text-white file:border-0 file:rounded file:px-3 file:py-1" />
           {parsedCsv && (
