@@ -6,6 +6,7 @@ import Holdings from './pages/Holdings'
 import Transactions from './pages/Transactions'
 import CorporateActions from './pages/CorporateActions'
 import LotWisePnl from './pages/LotWisePnl'
+import Returns from './pages/Returns'
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/transactions" element={<Transactions />} />
         <Route path="/corporate-actions" element={<CorporateActions />} />
         <Route path="/lot-pnl" element={<LotWisePnl />} />
+        <Route path="/returns" element={<Returns />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

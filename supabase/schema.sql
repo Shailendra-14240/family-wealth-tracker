@@ -57,3 +57,21 @@ create table net_worth_snapshots (
   created_at  timestamptz default now(),
   unique (date)
 );
+
+create table fund_movements (
+  id         bigint generated always as identity primary key,
+  date       date not null,
+  type       text not null check (type in ('deposit', 'withdrawal')),
+  amount     numeric(14,2) not null,
+  notes      text,
+  created_at timestamptz default now()
+);
+
+create table portfolio_snapshots (
+  id          bigint generated always as identity primary key,
+  date        date not null,
+  total_value numeric(14,2) not null,
+  method      text default 'manual',
+  notes       text,
+  created_at  timestamptz default now()
+);

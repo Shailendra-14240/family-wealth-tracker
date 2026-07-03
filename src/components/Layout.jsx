@@ -4,6 +4,7 @@ const navItems = [
   { to: '/', label: 'Dashboard', icon: '📊' },
   { to: '/holdings', label: 'Holdings', icon: '📈' },
   { to: '/lot-pnl', label: 'Lot P&L', icon: '🔍' },
+  { to: '/returns', label: 'Returns', icon: '💰' },
   { to: '/transactions', label: 'Txns', icon: '📋' },
   { to: '/accounts', label: 'Accounts', icon: '🏦' },
   { to: '/corporate-actions', label: 'Actions', icon: '🔄' },
