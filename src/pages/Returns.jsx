@@ -116,8 +116,10 @@ export default function Returns() {
       for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].split(',').map(c => c.replace(/["']/g, '').trim())
         if (cols.length < 2) continue
+        const date = cols[dateIdx] || ''
+        if (!date) continue // skip Opening/Closing Balance rows
         rows.push({
-          date: cols[dateIdx] || '',
+          date,
           voucher_type: cols[voucherIdx] || '',
           description: (cols[notesIdx] || '').slice(0, 250),
           debit: parseFloat(cols[debitIdx]) || 0,
@@ -137,7 +139,7 @@ export default function Returns() {
     if (delErr) { alert('Delete error: ' + delErr.message); setUploadingLedger(false); return }
     const entries = parsedLedger.rows.map(r => ({
       account_id: Number(selectedAccount),
-      date: r.date || null, voucher_type: r.voucher_type || 'Unknown',
+      date: r.date, voucher_type: r.voucher_type || 'Unknown',
       description: (r.description || '').slice(0, 250),
       debit: r.debit || 0, credit: r.credit || 0,
       net_balance: r.net_balance != null ? r.net_balance : null,
