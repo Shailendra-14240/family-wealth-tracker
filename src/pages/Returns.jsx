@@ -133,13 +133,17 @@ export default function Returns() {
   const handleConfirmLedger = async () => {
     if (!parsedLedger || !supabase || !selectedAccount) return
     setUploadingLedger(true)
-    await supabase.from('ledger_rows').delete().eq('account_id', Number(selectedAccount))
+    const { error: delErr } = await supabase.from('ledger_rows').delete().eq('account_id', Number(selectedAccount))
+    if (delErr) { alert('Delete error: ' + delErr.message); setUploadingLedger(false); return }
     const entries = parsedLedger.rows.map(r => ({
       account_id: Number(selectedAccount),
-      date: r.date, voucher_type: r.voucher_type, description: r.description,
-      debit: r.debit, credit: r.credit, net_balance: r.net_balance,
+      date: r.date || null, voucher_type: r.voucher_type || 'Unknown',
+      description: (r.description || '').slice(0, 250),
+      debit: r.debit || 0, credit: r.credit || 0,
+      net_balance: r.net_balance != null ? r.net_balance : null,
     }))
-    const { data } = await supabase.from('ledger_rows').insert(entries).select()
+    const { data, error: insErr } = await supabase.from('ledger_rows').insert(entries).select()
+    if (insErr) { alert('Insert error: ' + insErr.message); setUploadingLedger(false); return }
     if (data) setLedgerRows([
       ...ledgerRows.filter(r => Number(r.account_id) !== Number(selectedAccount)),
       ...data,
