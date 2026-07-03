@@ -68,6 +68,18 @@ create table fund_movements (
   created_at timestamptz default now()
 );
 
+create table ledger_rows (
+  id          bigint generated always as identity primary key,
+  account_id  bigint references accounts(id) on delete cascade,
+  date        date not null,
+  voucher_type text not null,
+  description  text,
+  debit       numeric(14,2) not null default 0,
+  credit      numeric(14,2) not null default 0,
+  net_balance numeric(14,2),
+  created_at  timestamptz default now()
+);
+
 create table portfolio_snapshots (
   id          bigint generated always as identity primary key,
   account_id  bigint references accounts(id) on delete cascade,

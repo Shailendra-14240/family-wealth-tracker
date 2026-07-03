@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 
 export default function Returns() {
   const [accounts, setAccounts] = useState([])
+  const [ledgerRows, setLedgerRows] = useState([])
   const [movements, setMovements] = useState([])
   const [snapshots, setSnapshots] = useState([])
   const [loading, setLoading] = useState(true)
@@ -13,16 +14,19 @@ export default function Returns() {
   const [ssForm, setSsForm] = useState({ date: new Date().toISOString().split('T')[0], total_value: '', notes: '' })
   const [parsedCsv, setParsedCsv] = useState(null)
   const [parsedLedger, setParsedLedger] = useState(null)
+  const [uploadingLedger, setUploadingLedger] = useState(false)
   const [adding, setAdding] = useState(false)
 
   useEffect(() => {
     if (!supabase) return
     Promise.all([
       supabase.from('accounts').select('id, name').order('name'),
+      supabase.from('ledger_rows').select('*').limit(1000000),
       supabase.from('fund_movements').select('*').limit(1000000),
       supabase.from('portfolio_snapshots').select('*').limit(1000000),
-    ]).then(([acctRes, fmRes, ssRes]) => {
+    ]).then(([acctRes, lrRes, fmRes, ssRes]) => {
       if (acctRes.data) setAccounts(acctRes.data)
+      if (lrRes.data) setLedgerRows(lrRes.data)
       if (fmRes.data) setMovements(fmRes.data)
       if (ssRes.data) setSnapshots(ssRes.data)
       setLoading(false)
@@ -31,11 +35,20 @@ export default function Returns() {
 
   const accountFilter = (item) => !selectedAccount || Number(item.account_id) === Number(selectedAccount)
 
+  const filteredLedger = useMemo(() => ledgerRows.filter(accountFilter), [ledgerRows, selectedAccount])
   const filteredMovements = useMemo(() => movements.filter(accountFilter), [movements, selectedAccount])
   const filteredSnapshots = useMemo(() => snapshots.filter(accountFilter), [snapshots, selectedAccount])
 
-  const totalDeposits = filteredMovements.filter(m => m.type === 'deposit').reduce((s, m) => s + Number(m.amount), 0)
-  const totalWithdrawals = filteredMovements.filter(m => m.type === 'withdrawal').reduce((s, m) => s + Number(m.amount), 0)
+  // Compute from raw ledger rows
+  const ledgerDeposits = filteredLedger.filter(r => r.voucher_type === 'Bank Receipts').reduce((s, r) => s + Number(r.credit), 0)
+  const ledgerWithdrawals = filteredLedger.filter(r => r.voucher_type === 'Bank Payments').reduce((s, r) => s + Number(r.debit), 0)
+
+  // Compute from manual fund movements
+  const manualDeposits = filteredMovements.filter(m => m.type === 'deposit').reduce((s, m) => s + Number(m.amount), 0)
+  const manualWithdrawals = filteredMovements.filter(m => m.type === 'withdrawal').reduce((s, m) => s + Number(m.amount), 0)
+
+  const totalDeposits = ledgerDeposits + manualDeposits
+  const totalWithdrawals = ledgerWithdrawals + manualWithdrawals
   const netAdded = totalDeposits - totalWithdrawals
   const latestSnapshot = filteredSnapshots.length > 0
     ? filteredSnapshots.reduce((a, b) => new Date(a.date) > new Date(b.date) ? a : b)
@@ -66,40 +79,55 @@ export default function Returns() {
     reader.onload = (evt) => {
       const lines = evt.target.result.split('\n').filter(Boolean)
       if (lines.length < 2) return
-      const headers = lines[0].split(',').map(h => h.replace(/["']/g, '').trim().toLowerCase())
+      const rawHeaders = lines[0].split(',').map(h => h.replace(/["']/g, '').trim())
+      const headers = rawHeaders.map(h => h.toLowerCase())
       const dateIdx = headers.indexOf('posting_date')
       const voucherIdx = headers.indexOf('voucher_type')
       const creditIdx = headers.indexOf('credit')
       const debitIdx = headers.indexOf('debit')
       const notesIdx = headers.indexOf('particulars')
+      const balIdx = headers.indexOf('net_balance')
       if (dateIdx < 0 || voucherIdx < 0) return
-      const deposits = [], withdrawals = []
+      const rows = []
       for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].split(',').map(c => c.replace(/["']/g, '').trim())
-        const type = cols[voucherIdx] || ''
-        const amt = type === 'Bank Receipts' ? parseFloat(cols[creditIdx]) || 0 : type === 'Bank Payments' ? parseFloat(cols[debitIdx]) || 0 : 0
-        if (amt <= 0) continue
-        const entry = { date: cols[dateIdx] || '', amount: amt, notes: cols[notesIdx]?.slice(0, 120) || '' }
-        if (type === 'Bank Receipts') deposits.push(entry)
-        else if (type === 'Bank Payments') withdrawals.push(entry)
+        if (cols.length < 2) continue
+        rows.push({
+          date: cols[dateIdx] || '',
+          voucher_type: cols[voucherIdx] || '',
+          description: (cols[notesIdx] || '').slice(0, 250),
+          debit: parseFloat(cols[debitIdx]) || 0,
+          credit: parseFloat(cols[creditIdx]) || 0,
+          net_balance: balIdx >= 0 ? (parseFloat(cols[balIdx]) || 0) : null,
+        })
       }
-      setParsedLedger({ deposits, withdrawals })
+      setParsedLedger({ rows, fileName: file.name })
     }
     reader.readAsText(file)
   }
 
   const handleConfirmLedger = async () => {
-    if (!parsedLedger || !supabase) return
-    setAdding(true)
-    const allEntries = [
-      ...parsedLedger.deposits.map(d => ({ date: d.date, type: 'deposit', amount: d.amount, account_id: selectedAccount || null, notes: d.notes })),
-      ...parsedLedger.withdrawals.map(w => ({ date: w.date, type: 'withdrawal', amount: w.amount, account_id: selectedAccount || null, notes: w.notes })),
-    ]
-    const { data } = await supabase.from('fund_movements').insert(allEntries).select()
-    if (data) setMovements([...data, ...movements])
-    setAdding(false)
+    if (!parsedLedger || !supabase || !selectedAccount) return
+    setUploadingLedger(true)
+    // Delete existing ledger rows for this account first
+    await supabase.from('ledger_rows').delete().eq('account_id', Number(selectedAccount))
+    // Insert all rows
+    const entries = parsedLedger.rows.map(r => ({
+      account_id: Number(selectedAccount),
+      date: r.date, voucher_type: r.voucher_type, description: r.description,
+      debit: r.debit, credit: r.credit, net_balance: r.net_balance,
+    }))
+    const { data } = await supabase.from('ledger_rows').insert(entries).select()
+    if (data) setLedgerRows(data)
+    setUploadingLedger(false)
     setParsedLedger(null)
     if (ledgerRef.current) ledgerRef.current.value = ''
+  }
+
+  const handleDeleteLedger = async () => {
+    if (!supabase || !selectedAccount) return
+    await supabase.from('ledger_rows').delete().eq('account_id', Number(selectedAccount))
+    setLedgerRows(ledgerRows.filter(r => Number(r.account_id) !== Number(selectedAccount)))
   }
 
   const handleDeleteMovement = async (id) => {
@@ -137,8 +165,6 @@ export default function Returns() {
       const lines = evt.target.result.split('\n').filter(Boolean)
       if (lines.length < 2) return
       const headers = lines[0].split(',').map(h => h.replace(/["']/g, '').trim().toLowerCase())
-      const qtyIdx = headers.findIndex(h => /qty|quantity|qty\./i.test(h))
-      const priceIdx = headers.findIndex(h => /price|rate|cost|avg|ltp/i.test(h))
       const curValIdx = headers.findIndex(h => /cur\.?\s*val|current/i.test(h))
       let total = 0
       let count = 0
@@ -148,6 +174,8 @@ export default function Returns() {
           const val = parseFloat(cols[curValIdx]) || 0
           if (val) { total += val; count++ }
         } else {
+          const qtyIdx = headers.findIndex(h => /qty|quantity|qty\./i.test(h))
+          const priceIdx = headers.findIndex(h => /price|rate|cost|avg|ltp/i.test(h))
           const qty = qtyIdx >= 0 ? parseFloat(cols[qtyIdx]) || 0 : 0
           const price = priceIdx >= 0 ? parseFloat(cols[priceIdx]) || 0 : 0
           if (qty && price) { total += qty * price; count++ }
@@ -157,6 +185,8 @@ export default function Returns() {
     }
     reader.readAsText(file)
   }
+
+  const accountLedgerRows = filteredLedger.length
 
   if (!supabase) return <p className="text-gray-500 text-center mt-10">Connect Supabase to see returns data</p>
   if (loading) return <p className="text-gray-500 text-center mt-10">Loading...</p>
@@ -209,8 +239,38 @@ export default function Returns() {
         </div>
       </div>
 
+      {/* Ledger Upload */}
       <div className="bg-gray-900 rounded-xl p-4">
-        <p className="text-sm text-gray-400 mb-3">Add Fund Movement</p>
+        <p className="text-sm text-gray-400 mb-2">Zerodha Ledger</p>
+        <p className="text-xs text-gray-600 mb-2">Upload the full ledger CSV — all rows saved as raw data. Deposits/withdrawals computed automatically.</p>
+        {!selectedAccount && <p className="text-xs text-yellow-500 mb-2">Select an account first</p>}
+        <div className="flex gap-2 items-center">
+          <input ref={ledgerRef} type="file" accept=".csv" onChange={handleLedgerFile}
+            className="text-sm text-gray-400 file:mr-3 file:bg-purple-600 file:text-white file:border-0 file:rounded file:px-3 file:py-1 flex-1" />
+          {accountLedgerRows > 0 && (
+            <button onClick={handleDeleteLedger} className="text-red-500 text-xs hover:text-red-400">Delete</button>
+          )}
+        </div>
+        {parsedLedger && (
+          <div className="mt-2 space-y-1 text-xs">
+            <p className="text-gray-400">{parsedLedger.rows.length} rows from {parsedLedger.fileName}</p>
+            <p className="text-green-400">Deposits: +₹{parsedLedger.rows.filter(r => r.voucher_type === 'Bank Receipts').reduce((s, r) => s + r.credit, 0).toLocaleString()}</p>
+            <p className="text-red-400">Withdrawals: -₹{parsedLedger.rows.filter(r => r.voucher_type === 'Bank Payments').reduce((s, r) => s + r.debit, 0).toLocaleString()}</p>
+            <p className="text-xs text-yellow-500">This will replace existing ledger data for this account</p>
+            <button onClick={handleConfirmLedger} disabled={uploadingLedger || !selectedAccount}
+              className="bg-purple-600 text-white px-3 py-1 rounded text-xs mt-1">
+              {uploadingLedger ? 'Saving...' : `Save ${parsedLedger.rows.length} rows`}
+            </button>
+          </div>
+        )}
+        {accountLedgerRows > 0 && !parsedLedger && (
+          <p className="text-xs text-gray-500 mt-1">{accountLedgerRows} ledger rows saved for this account</p>
+        )}
+      </div>
+
+      {/* Manual Fund Movement */}
+      <div className="bg-gray-900 rounded-xl p-4">
+        <p className="text-sm text-gray-400 mb-3">Manual Fund Movement</p>
         <form onSubmit={handleAddMovement} className="flex flex-wrap gap-2">
           <input type="date" className="bg-gray-800 rounded px-2 py-1.5 text-sm flex-1 min-w-[120px]" value={fmForm.date} onChange={e => setFmForm({ ...fmForm, date: e.target.value })} />
           <select className="bg-gray-800 rounded px-2 py-1.5 text-sm w-28" value={fmForm.type} onChange={e => setFmForm({ ...fmForm, type: e.target.value })}>
@@ -221,30 +281,11 @@ export default function Returns() {
           <input type="text" placeholder="Notes" className="bg-gray-800 rounded px-2 py-1.5 text-sm flex-1 min-w-[120px]" value={fmForm.notes} onChange={e => setFmForm({ ...fmForm, notes: e.target.value })} />
           <button type="submit" disabled={adding || !selectedAccount} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm">Add</button>
         </form>
-        {!selectedAccount && <p className="text-xs text-yellow-500 mt-1">Select an account first</p>}
-      </div>
-
-      <div className="bg-gray-900 rounded-xl p-4">
-        <p className="text-sm text-gray-400 mb-2">Upload Zerodha Ledger CSV</p>
-        <p className="text-xs text-gray-600 mb-2">Auto-extracts deposits (Bank Receipts) and withdrawals (Bank Payments)</p>
-        <input ref={ledgerRef} type="file" accept=".csv" onChange={handleLedgerFile}
-          className="text-sm text-gray-400 file:mr-3 file:bg-purple-600 file:text-white file:border-0 file:rounded file:px-3 file:py-1" />
-        {!selectedAccount && <p className="text-xs text-yellow-500 mt-1">Select an account first before uploading ledger</p>}
-        {parsedLedger && (
-          <div className="mt-2 space-y-1 text-xs">
-            <p className="text-green-400">{parsedLedger.deposits.length} deposits · Total: <span className="font-semibold">+₹{parsedLedger.deposits.reduce((s, d) => s + d.amount, 0).toLocaleString()}</span></p>
-            <p className="text-red-400">{parsedLedger.withdrawals.length} withdrawals · Total: <span className="font-semibold">-₹{parsedLedger.withdrawals.reduce((s, w) => s + w.amount, 0).toLocaleString()}</span></p>
-            <button onClick={handleConfirmLedger} disabled={adding || !selectedAccount}
-              className="bg-purple-600 text-white px-3 py-1 rounded text-xs mt-1">
-              {adding ? 'Saving...' : `Save ${parsedLedger.deposits.length + parsedLedger.withdrawals.length} entries`}
-            </button>
-          </div>
-        )}
       </div>
 
       {filteredMovements.length > 0 && (
         <div className="bg-gray-900 rounded-xl p-4">
-          <p className="text-sm text-gray-400 mb-2">Fund Movements ({filteredMovements.length})</p>
+          <p className="text-sm text-gray-400 mb-2">Manual Movements ({filteredMovements.length})</p>
           <div className="space-y-1 max-h-48 overflow-y-auto">
             {filteredMovements.map(m => (
               <div key={m.id} className="flex justify-between items-center text-sm py-1 border-b border-gray-800 last:border-0">
@@ -262,17 +303,15 @@ export default function Returns() {
 
       <div className="bg-gray-900 rounded-xl p-4">
         <p className="text-sm text-gray-400 mb-3">Portfolio Snapshot</p>
-
         <form onSubmit={handleAddSnapshot} className="flex flex-wrap gap-2 mb-3">
           <input type="date" className="bg-gray-800 rounded px-2 py-1.5 text-sm flex-1 min-w-[120px]" value={ssForm.date} onChange={e => setSsForm({ ...ssForm, date: e.target.value })} />
           <input type="number" placeholder="Total value" className="bg-gray-800 rounded px-2 py-1.5 text-sm w-32" value={ssForm.total_value} onChange={e => setSsForm({ ...ssForm, total_value: e.target.value })} />
           <input type="text" placeholder="Notes" className="bg-gray-800 rounded px-2 py-1.5 text-sm flex-1 min-w-[120px]" value={ssForm.notes} onChange={e => setSsForm({ ...ssForm, notes: e.target.value })} />
           <button type="submit" disabled={adding || !selectedAccount} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm">Save</button>
         </form>
-        {!selectedAccount && <p className="text-xs text-yellow-500 -mt-2 mb-2">Select an account first</p>}
 
         <div className="border-t border-gray-800 pt-3">
-          <p className="text-xs text-gray-500 mb-2">Or upload current holdings CSV to calculate total value</p>
+          <p className="text-xs text-gray-500 mb-2">Or upload holdings CSV (uses Cur.val column if present, else qty × price)</p>
           <input ref={fileRef} type="file" accept=".csv" onChange={handleCsvFile}
             className="text-sm text-gray-400 file:mr-3 file:bg-green-600 file:text-white file:border-0 file:rounded file:px-3 file:py-1" />
           {parsedCsv && (
