@@ -7,9 +7,11 @@ export default function Returns() {
   const [loading, setLoading] = useState(true)
   const fileRef = useRef()
 
+  const ledgerRef = useRef()
   const [fmForm, setFmForm] = useState({ date: new Date().toISOString().split('T')[0], type: 'deposit', amount: '', notes: '' })
   const [ssForm, setSsForm] = useState({ date: new Date().toISOString().split('T')[0], total_value: '', notes: '' })
   const [parsedCsv, setParsedCsv] = useState(null)
+  const [parsedLedger, setParsedLedger] = useState(null)
   const [adding, setAdding] = useState(false)
 
   useEffect(() => {
@@ -44,6 +46,49 @@ export default function Returns() {
       setFmForm({ ...fmForm, amount: '', notes: '' })
     }
     setAdding(false)
+  }
+
+  const handleLedgerFile = (e) => {
+    const file = ledgerRef.current?.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (evt) => {
+      const lines = evt.target.result.split('\n').filter(Boolean)
+      if (lines.length < 2) return
+      const headers = lines[0].split(',').map(h => h.replace(/["']/g, '').trim().toLowerCase())
+      const dateIdx = headers.indexOf('posting_date')
+      const voucherIdx = headers.indexOf('voucher_type')
+      const creditIdx = headers.indexOf('credit')
+      const debitIdx = headers.indexOf('debit')
+      const notesIdx = headers.indexOf('particulars')
+      if (dateIdx < 0 || voucherIdx < 0) return
+      const deposits = [], withdrawals = []
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(',').map(c => c.replace(/["']/g, '').trim())
+        const type = cols[voucherIdx] || ''
+        const amt = type === 'Bank Receipts' ? parseFloat(cols[creditIdx]) || 0 : type === 'Bank Payments' ? parseFloat(cols[debitIdx]) || 0 : 0
+        if (amt <= 0) continue
+        const entry = { date: cols[dateIdx] || '', amount: amt, notes: cols[notesIdx]?.slice(0, 120) || '' }
+        if (type === 'Bank Receipts') deposits.push(entry)
+        else if (type === 'Bank Payments') withdrawals.push(entry)
+      }
+      setParsedLedger({ deposits, withdrawals })
+    }
+    reader.readAsText(file)
+  }
+
+  const handleConfirmLedger = async () => {
+    if (!parsedLedger || !supabase) return
+    setAdding(true)
+    const allEntries = [
+      ...parsedLedger.deposits.map(d => ({ date: d.date, type: 'deposit', amount: d.amount, notes: d.notes })),
+      ...parsedLedger.withdrawals.map(w => ({ date: w.date, type: 'withdrawal', amount: w.amount, notes: w.notes })),
+    ]
+    const { data } = await supabase.from('fund_movements').insert(allEntries).select()
+    if (data) setMovements([...data, ...movements])
+    setAdding(false)
+    setParsedLedger(null)
+    if (ledgerRef.current) ledgerRef.current.value = ''
   }
 
   const handleDeleteMovement = async (id) => {
@@ -150,6 +195,23 @@ export default function Returns() {
           <input type="text" placeholder="Notes" className="bg-gray-800 rounded px-2 py-1.5 text-sm flex-1 min-w-[120px]" value={fmForm.notes} onChange={e => setFmForm({ ...fmForm, notes: e.target.value })} />
           <button type="submit" disabled={adding} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm">Add</button>
         </form>
+      </div>
+
+      <div className="bg-gray-900 rounded-xl p-4">
+        <p className="text-sm text-gray-400 mb-2">Upload Zerodha Ledger CSV</p>
+        <p className="text-xs text-gray-600 mb-2">Auto-extracts deposits (Bank Receipts) and withdrawals (Bank Payments)</p>
+        <input ref={ledgerRef} type="file" accept=".csv" onChange={handleLedgerFile}
+          className="text-sm text-gray-400 file:mr-3 file:bg-purple-600 file:text-white file:border-0 file:rounded file:px-3 file:py-1" />
+        {parsedLedger && (
+          <div className="mt-2 space-y-1 text-xs">
+            <p className="text-green-400">{parsedLedger.deposits.length} deposits · Total: <span className="font-semibold">+₹{parsedLedger.deposits.reduce((s, d) => s + d.amount, 0).toLocaleString()}</span></p>
+            <p className="text-red-400">{parsedLedger.withdrawals.length} withdrawals · Total: <span className="font-semibold">-₹{parsedLedger.withdrawals.reduce((s, w) => s + w.amount, 0).toLocaleString()}</span></p>
+            <button onClick={handleConfirmLedger} disabled={adding}
+              className="bg-purple-600 text-white px-3 py-1 rounded text-xs mt-1">
+              {adding ? 'Saving...' : `Save ${parsedLedger.deposits.length + parsedLedger.withdrawals.length} entries`}
+            </button>
+          </div>
+        )}
       </div>
 
       {movements.length > 0 && (
