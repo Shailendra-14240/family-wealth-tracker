@@ -21,6 +21,7 @@ export default function Transactions() {
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo, setFilterDateTo] = useState('')
   const [filterSymbol, setFilterSymbol] = useState('')
+  const [visibleCount, setVisibleCount] = useState(100)
   const [parsed, setParsed] = useState(null)
   const [parsing, setParsing] = useState(false)
   const [uploadStatus, setUploadStatus] = useState(null)
@@ -283,10 +284,12 @@ export default function Transactions() {
           if (filterDateFrom) filtered = filtered.filter(t => t.date >= filterDateFrom)
           if (filterDateTo) filtered = filtered.filter(t => t.date <= filterDateTo)
           if (filterSymbol) filtered = filtered.filter(t => t.symbol.includes(filterSymbol))
+          const shown = filtered.slice(0, visibleCount)
+          const hasMore = filtered.length > shown.length
           return (
             <>
               <p className="text-xs text-gray-500 mb-1">{filtered.length} of {txns.length} transactions</p>
-              {filtered.map((t) => (
+              {shown.map((t) => (
                 <div key={t.id} className="bg-gray-900 rounded-xl p-4">
                   <div className="flex justify-between items-center">
                     <div>
@@ -298,6 +301,12 @@ export default function Transactions() {
                   </div>
                 </div>
               ))}
+              {hasMore && (
+                <button onClick={() => setVisibleCount(v => v + 200)}
+                  className="w-full text-center text-sm text-blue-400 py-2 hover:text-blue-300">
+                  Show {Math.min(200, filtered.length - shown.length)} more ({filtered.length - shown.length} remaining)
+                </button>
+              )}
             </>
           )
         })()}
