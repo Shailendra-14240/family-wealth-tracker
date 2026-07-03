@@ -125,16 +125,21 @@ export default function Returns() {
       const lines = evt.target.result.split('\n').filter(Boolean)
       if (lines.length < 2) return
       const headers = lines[0].split(',').map(h => h.replace(/["']/g, '').trim().toLowerCase())
-      const qtyIdx = headers.findIndex(h => /qty|quantity/i.test(h))
-      const priceIdx = headers.findIndex(h => /price|rate|cost|avg/i.test(h))
-      const symIdx = headers.findIndex(h => /symbol|scrip|tradingsymbol|stock/i.test(h))
+      const qtyIdx = headers.findIndex(h => /qty|quantity|qty\./i.test(h))
+      const priceIdx = headers.findIndex(h => /price|rate|cost|avg|ltp/i.test(h))
+      const curValIdx = headers.findIndex(h => /cur\.?\s*val|current/i.test(h))
       let total = 0
       let count = 0
       for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].split(',').map(c => c.replace(/["']/g, '').trim())
-        const qty = qtyIdx >= 0 ? parseFloat(cols[qtyIdx]) || 0 : 0
-        const price = priceIdx >= 0 ? parseFloat(cols[priceIdx]) || 0 : 0
-        if (qty && price) { total += qty * price; count++ }
+        if (curValIdx >= 0) {
+          const val = parseFloat(cols[curValIdx]) || 0
+          if (val) { total += val; count++ }
+        } else {
+          const qty = qtyIdx >= 0 ? parseFloat(cols[qtyIdx]) || 0 : 0
+          const price = priceIdx >= 0 ? parseFloat(cols[priceIdx]) || 0 : 0
+          if (qty && price) { total += qty * price; count++ }
+        }
       }
       setParsedCsv({ total: Math.round(total * 100) / 100, count, date: new Date().toISOString().split('T')[0] })
     }
