@@ -22,6 +22,7 @@ export default function Transactions() {
   const [filterDateTo, setFilterDateTo] = useState('')
   const [filterSymbol, setFilterSymbol] = useState('')
   const [parsed, setParsed] = useState(null)
+  const [parsing, setParsing] = useState(false)
   const [uploadStatus, setUploadStatus] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [form, setForm] = useState({
@@ -68,11 +69,16 @@ export default function Transactions() {
     const file = fileRef.current?.files?.[0]
     if (!file) return
     setUploadStatus(null)
+    setParsed(null)
+    setParsing(true)
     const reader = new FileReader()
     reader.onload = (evt) => {
       const text = evt.target.result
-      const result = parseCSV(text, broker || null)
-      setParsed(result)
+      setTimeout(() => {
+        const result = parseCSV(text, broker || null)
+        setParsed(result)
+        setParsing(false)
+      }, 50)
     }
     reader.readAsText(file)
   }
@@ -80,17 +86,23 @@ export default function Transactions() {
   const handleConfirmUpload = async () => {
     if (!parsed || !parsed.rows.length || !supabase) return
     setUploading(true)
-    setUploadStatus(null)
+    setUploadStatus({ type: 'info', msg: 'Checking duplicates...' })
 
     try {
       let rows = parsed.rows.map(r => ({ ...r, account_id: csvAccountId || null }))
       const orderIds = rows.map(r => r.order_id).filter(Boolean)
+
       if (orderIds.length) {
-        const { data: existing } = await supabase
-          .from('transactions')
-          .select('order_id')
-          .in('order_id', orderIds)
-        const existingIds = new Set((existing || []).map(r => r.order_id))
+        const chunkSize = 500
+        const existingIds = new Set()
+        for (let i = 0; i < orderIds.length; i += chunkSize) {
+          const chunk = orderIds.slice(i, i + chunkSize)
+          const { data: existing } = await supabase
+            .from('transactions')
+            .select('order_id')
+            .in('order_id', chunk)
+          if (existing) existing.forEach(r => existingIds.add(r.order_id))
+        }
         rows = rows.filter(r => !r.order_id || !existingIds.has(r.order_id))
       }
 
@@ -101,11 +113,20 @@ export default function Transactions() {
         return
       }
 
-      const { data, error } = await supabase.from('transactions').insert(rows).select('*, accounts(name)')
-      if (error) throw new Error(error.message)
-      if (data) {
-        setTxns([...data, ...txns])
-        const lines = [`✓ Added ${rows.length} new transactions`]
+      setUploadStatus({ type: 'info', msg: `Uploading ${rows.length} transactions...` })
+
+      const batchSize = 500
+      let inserted = []
+      for (let i = 0; i < rows.length; i += batchSize) {
+        const batch = rows.slice(i, i + batchSize)
+        const { data, error } = await supabase.from('transactions').insert(batch).select('*, accounts(name)')
+        if (error) throw new Error(error.message)
+        if (data) inserted.push(...data)
+      }
+
+      if (inserted.length) {
+        setTxns([...inserted, ...txns])
+        const lines = [`✓ Added ${inserted.length} new transactions`]
         if (skipped > 0) lines.push(`↻ Skipped ${skipped} duplicate${skipped > 1 ? 's' : ''} (already exist)`)
         setUploadStatus({ type: 'success', msg: lines.join('\n') })
         setParsed(null)
@@ -145,6 +166,10 @@ export default function Transactions() {
           onChange={handleFileSelect}
           className="text-sm text-gray-400 file:mr-3 file:bg-blue-600 file:text-white file:border-0 file:rounded file:px-3 file:py-1"
         />
+
+        {parsing && (
+          <p className="text-xs text-yellow-400 mt-3">Parsing CSV, please wait...</p>
+        )}
 
         {parsed && (
           <div className="mt-3 space-y-2">
