@@ -39,7 +39,7 @@ export default function Transactions() {
   useEffect(() => {
     if (!supabase) return
     Promise.all([
-      supabase.from('transactions').select('*, accounts(name)').order('date', { ascending: false }),
+      supabase.from('transactions').select('*, accounts(name)', { count: 'exact' }).order('date', { ascending: false }).limit(1000000),
       supabase.from('accounts').select('id, name'),
     ]).then(([txnRes, acctRes]) => {
       if (txnRes.data) setTxns(txnRes.data)

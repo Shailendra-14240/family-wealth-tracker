@@ -14,7 +14,7 @@ export default function Holdings() {
   useEffect(() => {
     if (!supabase) return
     Promise.all([
-      supabase.from('transactions').select('*').order('date'),
+      supabase.from('transactions').select('*').order('date').limit(1000000),
       supabase.from('corporate_actions').select('*'),
     ]).then(([txnRes, actRes]) => {
       if (txnRes.data) setAllTxns(txnRes.data)

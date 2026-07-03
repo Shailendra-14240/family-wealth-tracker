@@ -12,7 +12,7 @@ export default function Dashboard() {
     if (!supabase) return
     Promise.all([
       supabase.from('accounts').select('*'),
-      supabase.from('transactions').select('*'),
+      supabase.from('transactions').select('*').limit(1000000),
       supabase.from('corporate_actions').select('*'),
     ]).then(([acctRes, txnRes, actRes]) => {
       if (acctRes.data) setAccounts(acctRes.data)
