@@ -140,7 +140,10 @@ export default function Returns() {
       debit: r.debit, credit: r.credit, net_balance: r.net_balance,
     }))
     const { data } = await supabase.from('ledger_rows').insert(entries).select()
-    if (data) setLedgerRows(data)
+    if (data) setLedgerRows([
+      ...ledgerRows.filter(r => Number(r.account_id) !== Number(selectedAccount)),
+      ...data,
+    ])
     setUploadingLedger(false)
     setParsedLedger(null)
     if (ledgerRef.current) ledgerRef.current.value = ''
