@@ -21,7 +21,7 @@ export default function Returns() {
     if (!supabase) return
     Promise.all([
       supabase.from('accounts').select('id, name').order('name'),
-      supabase.from('ledger_rows').select('*').limit(1000000),
+      supabase.from('ledger_rows').select('*').limit(1000000).order('row_order', { ascending: true, nullsFirst: 'last' }),
       supabase.from('fund_movements').select('*').limit(1000000),
       supabase.from('portfolio_snapshots').select('*').limit(1000000),
     ]).then(([acctRes, lrRes, fmRes, ssRes]) => {
