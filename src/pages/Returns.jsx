@@ -19,18 +19,26 @@ export default function Returns() {
 
   useEffect(() => {
     if (!supabase) return
-    Promise.all([
-      supabase.from('accounts').select('id, name').order('name'),
-      supabase.from('ledger_rows').select('*').limit(1000000).order('row_order', { ascending: true, nullsFirst: 'last' }),
-      supabase.from('fund_movements').select('*').limit(1000000),
-      supabase.from('portfolio_snapshots').select('*').limit(1000000),
-    ]).then(([acctRes, lrRes, fmRes, ssRes]) => {
+    ;(async () => {
+      const acctRes = await supabase.from('accounts').select('id, name').order('name')
       if (acctRes.data) setAccounts(acctRes.data)
-      if (lrRes.data) setLedgerRows(lrRes.data)
+      // Fetch ledger rows per-account to stay under Supabase's 1000-row limit
+      let allLedgerRows = []
+      if (acctRes.data) {
+        for (const acct of acctRes.data) {
+          const { data } = await supabase.from('ledger_rows').select('*').eq('account_id', acct.id).order('row_order', { ascending: true, nullsFirst: 'last' })
+          if (data) allLedgerRows = allLedgerRows.concat(data)
+        }
+      }
+      setLedgerRows(allLedgerRows)
+      const [fmRes, ssRes] = await Promise.all([
+        supabase.from('fund_movements').select('*').limit(5000),
+        supabase.from('portfolio_snapshots').select('*').limit(5000),
+      ])
       if (fmRes.data) setMovements(fmRes.data)
       if (ssRes.data) setSnapshots(ssRes.data)
       setLoading(false)
-    })
+    })()
   }, [])
 
   const accountFilter = (item) => !selectedAccount || Number(item.account_id) === Number(selectedAccount)
@@ -155,11 +163,17 @@ export default function Returns() {
       debit: r.debit || 0, credit: r.credit || 0,
       net_balance: r.net_balance != null ? r.net_balance : null,
     }))
-    const { data, error: insErr } = await supabase.from('ledger_rows').insert(entries).select()
-    if (insErr) { alert('Insert error: ' + insErr.message); setUploadingLedger(false); return }
-    if (data) setLedgerRows([
+    const CHUNK_SIZE = 400
+    let allInserted = []
+    for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
+      const chunk = entries.slice(i, i + CHUNK_SIZE)
+      const { data, error } = await supabase.from('ledger_rows').insert(chunk).select()
+      if (error) { alert('Insert error at batch ' + (i / CHUNK_SIZE + 1) + ': ' + error.message); setUploadingLedger(false); return }
+      if (data) allInserted = allInserted.concat(data)
+    }
+    setLedgerRows([
       ...ledgerRows.filter(r => Number(r.account_id) !== Number(selectedAccount)),
-      ...data,
+      ...allInserted,
     ])
     setUploadingLedger(false)
     setParsedLedger(null)
