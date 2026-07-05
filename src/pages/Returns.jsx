@@ -57,12 +57,17 @@ export default function Returns() {
         + fm.filter(m => m.type === 'withdrawal').reduce((s, m) => s + Number(m.amount), 0)
       const latest = ss.length ? ss.reduce((a, b) => new Date(a.date) > new Date(b.date) ? a : b) : null
       const holdingsVal = latest ? Number(latest.total_value) : 0
-      const netBalRow = lr.length ? lr.reduce((a, b) => new Date(a.date) > new Date(b.date) || (a.date === b.date && a.id > b.id) ? a : b) : null
+      const netBalRow = lr.length ? lr.reduce((a, b) => (a.row_order ?? 0) > (b.row_order ?? 0) ? a : b) : null
       const cash = netBalRow ? Number(netBalRow.net_balance) || 0 : 0
+      const sorted = [...lr].sort((a, b) => (a.row_order ?? 0) - (b.row_order ?? 0))
+      const lastSpan = sorted.filter(r => /span.*margin.*blocked/i.test(r.description) && Number(r.debit) > 0).at(-1)
+      const lastExposure = sorted.filter(r => /exposure.*margin.*blocked/i.test(r.description) && Number(r.debit) > 0).at(-1)
+      const netMarginBlocked = (lastSpan ? Number(lastSpan.debit) : 0) + (lastExposure ? Number(lastExposure.debit) : 0)
+      const availableCash = cash + netMarginBlocked
       const netAdded = deposits - withdrawals
-      const totalValue = holdingsVal + cash
+      const totalValue = holdingsVal + availableCash
       const pnl = totalValue - netAdded
-      return { accountId: Number(aid), deposits, withdrawals, netAdded, holdingsVal, cash, totalValue, pnl }
+      return { accountId: Number(aid), deposits, withdrawals, netAdded, holdingsVal, cash, netMarginBlocked, availableCash, totalValue, pnl }
     })
   }, [ledgerRows, movements, snapshots])
 
@@ -76,7 +81,7 @@ export default function Returns() {
   const totalWithdrawals = accountData.reduce((s, a) => s + a.withdrawals, 0)
   const netAdded = accountData.reduce((s, a) => s + a.netAdded, 0)
   const totalHoldingsVal = accountData.reduce((s, a) => s + a.holdingsVal, 0)
-  const totalCash = accountData.reduce((s, a) => s + a.cash, 0)
+  const totalCash = accountData.reduce((s, a) => s + a.availableCash, 0)
   const totalValue = totalHoldingsVal + totalCash
   const totalPnl = accountData.reduce((s, a) => s + a.pnl, 0)
   const returnPct = netAdded > 0 ? (totalPnl / netAdded * 100) : 0
@@ -113,13 +118,17 @@ export default function Returns() {
       const balIdx = headers.indexOf('net_balance')
       if (dateIdx < 0 || voucherIdx < 0) return
       const rows = []
+      let lastDate = ''
       for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].split(',').map(c => c.replace(/["']/g, '').trim())
         if (cols.length < 2) continue
-        const date = cols[dateIdx] || ''
-        if (!date) continue // skip Opening/Closing Balance rows
+        let date = cols[dateIdx] || ''
+        if (!date && rows.length === 0) continue // skip Opening Balance (first row with no date)
+        if (date) lastDate = date
+        else date = lastDate // Closing Balance inherits last seen date
         rows.push({
           date,
+          row_order: i,
           voucher_type: cols[voucherIdx] || '',
           description: (cols[notesIdx] || '').slice(0, 250),
           debit: parseFloat(cols[debitIdx]) || 0,
@@ -139,6 +148,7 @@ export default function Returns() {
     if (delErr) { alert('Delete error: ' + delErr.message); setUploadingLedger(false); return }
     const entries = parsedLedger.rows.map(r => ({
       account_id: Number(selectedAccount),
+      row_order: r.row_order,
       date: r.date, voucher_type: r.voucher_type || 'Unknown',
       description: (r.description || '').slice(0, 250),
       debit: r.debit || 0, credit: r.credit || 0,
@@ -260,6 +270,11 @@ export default function Returns() {
         <div className="bg-gray-900 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-400">Available Cash</p>
           <p className="text-lg font-bold text-yellow-400">₹{totalCash.toLocaleString()}</p>
+          {accountData.some(a => a.netMarginBlocked > 0) && (
+            <p className="text-[10px] text-gray-500 mt-0.5">
+              (includes ₹{accountData.reduce((s, a) => s + a.netMarginBlocked, 0).toLocaleString()} blocked margin)
+            </p>
+          )}
         </div>
         <div className="bg-gray-900 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-400">Total Value</p>
@@ -293,10 +308,11 @@ export default function Returns() {
               return (
                 <div key={a.accountId} className="text-xs border-b border-gray-800 pb-2 last:border-0">
                   <p className="font-medium text-gray-300 mb-1">{acct?.name || `Account #${a.accountId}`}</p>
-                  <div className="grid grid-cols-4 gap-2 text-gray-500">
+                  <div className="grid grid-cols-5 gap-1 text-gray-500">
                     <span>Net: <span className="text-blue-400">₹{a.netAdded.toLocaleString()}</span></span>
                     <span>Holdings: <span className="text-purple-400">₹{a.holdingsVal.toLocaleString()}</span></span>
-                    <span>Cash: <span className="text-yellow-400">₹{a.cash.toLocaleString()}</span></span>
+                    <span>Cash: <span className="text-yellow-400">₹{a.availableCash.toLocaleString()}</span></span>
+                    {a.netMarginBlocked > 0 && <span className="text-[10px] text-gray-600 self-center">(₹{a.netMarginBlocked.toLocaleString()} blocked)</span>}
                     <span>P&L: <span className={a.pnl >= 0 ? 'text-green-400' : 'text-red-400'}>{a.pnl >= 0 ? '+' : ''}₹{a.pnl.toLocaleString()}</span></span>
                   </div>
                 </div>

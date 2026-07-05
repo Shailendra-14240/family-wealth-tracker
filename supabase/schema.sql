@@ -71,6 +71,7 @@ create table fund_movements (
 create table ledger_rows (
   id          bigint generated always as identity primary key,
   account_id  bigint references accounts(id) on delete cascade,
+  row_order   integer not null default 0,
   date        date not null,
   voucher_type text not null,
   description  text,
