@@ -57,9 +57,10 @@ export default function Returns() {
         + fm.filter(m => m.type === 'withdrawal').reduce((s, m) => s + Number(m.amount), 0)
       const latest = ss.length ? ss.reduce((a, b) => new Date(a.date) > new Date(b.date) ? a : b) : null
       const holdingsVal = latest ? Number(latest.total_value) : 0
-      const netBalRow = lr.length ? lr.reduce((a, b) => (a.row_order ?? 0) > (b.row_order ?? 0) ? a : b) : null
+      const byRowOrder = (a, b) => (a.row_order ?? 0) - (b.row_order ?? 0) || a.id - b.id
+      const netBalRow = lr.length ? lr.reduce((a, b) => byRowOrder(a, b) > 0 ? a : b) : null
       const cash = netBalRow ? Number(netBalRow.net_balance) || 0 : 0
-      const sorted = [...lr].sort((a, b) => (a.row_order ?? 0) - (b.row_order ?? 0))
+      const sorted = [...lr].sort(byRowOrder)
       const lastSpan = sorted.filter(r => /span.*margin.*blocked/i.test(r.description) && Number(r.debit) > 0).at(-1)
       const lastExposure = sorted.filter(r => /exposure.*margin.*blocked/i.test(r.description) && Number(r.debit) > 0).at(-1)
       const netMarginBlocked = (lastSpan ? Number(lastSpan.debit) : 0) + (lastExposure ? Number(lastExposure.debit) : 0)
