@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { formatIndian } from '../lib/format'
 
 const ACCOUNT_TYPES = ['demat', 'savings', 'loan', 'mutual_fund', 'crypto', 'other']
 
@@ -61,7 +62,7 @@ export default function Accounts() {
               <p className="text-xs text-gray-500 capitalize">{acct.type.replace('_', ' ')}</p>
             </div>
             <p className={`font-semibold ${acct.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-              ₹{Number(acct.balance).toLocaleString()}
+              ₹{formatIndian(acct.balance)}
             </p>
           </div>
         ))}

@@ -17,8 +17,8 @@ export default function Layout({ children }) {
         <h1 className="text-lg font-bold">Family Wealth Tracker</h1>
       </header>
       <main className="flex-1 p-4 pb-28">{children}</main>
-      <nav className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 z-10">
-        <div className="flex justify-around">
+      <nav className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 z-10 overflow-x-auto">
+        <div className="flex justify-around min-w-max">
           {navItems.map((item) => (
             <NavLink
               key={item.to}

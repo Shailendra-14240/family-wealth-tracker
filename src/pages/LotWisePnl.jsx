@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { calculateLotWisePnl, consolidateLotRecords } from '../lib/pnlCalc'
+import { formatIndian } from '../lib/format'
 
 export default function LotWisePnl() {
   const [transactions, setTransactions] = useState([])
@@ -100,7 +101,7 @@ export default function LotWisePnl() {
                           <td className="py-1 pr-2">{lot.buyDate}</td>
                           <td className="text-right py-1 px-2">{lot.buyQty}</td>
                           <td className="text-right py-1 px-2">{lot.buyPrice}</td>
-                          <td className="text-right py-1 px-2">{buyValue.toFixed(0)}</td>
+                          <td className="text-right py-1 px-2">{formatIndian(buyValue)}</td>
                           <td className="py-1 px-2 text-gray-600">--</td>
                           <td className="text-right py-1 px-2">--</td>
                           <td className="text-right py-1 px-2">--</td>
@@ -117,13 +118,13 @@ export default function LotWisePnl() {
                             <td className="py-1 pr-2">{j === 0 ? lot.buyDate : ''}</td>
                             <td className="text-right py-1 px-2">{j === 0 ? lot.buyQty : ''}</td>
                             <td className="text-right py-1 px-2">{j === 0 ? lot.buyPrice : ''}</td>
-                            <td className="text-right py-1 px-2">{j === 0 ? buyValue.toFixed(0) : ''}</td>
+                            <td className="text-right py-1 px-2">{j === 0 ? formatIndian(buyValue) : ''}</td>
                             <td className="py-1 px-2">{sell.date}</td>
                             <td className="text-right py-1 px-2">{sell.qty}</td>
                             <td className="text-right py-1 px-2">{sell.price}</td>
-                            <td className="text-right py-1 px-2">{sellValue.toFixed(0)}</td>
+                            <td className="text-right py-1 px-2">{formatIndian(sellValue)}</td>
                             <td className={`text-right py-1 px-2 font-medium ${sell.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                              {sell.pnl >= 0 ? '+' : ''}{sell.pnl.toFixed(0)}
+                              {sell.pnl >= 0 ? '+' : ''}{formatIndian(sell.pnl)}
                             </td>
                             <td className="text-right py-1 pl-2">{j === lot.sells.length - 1 ? lot.remainingQty : ''}</td>
                           </tr>
@@ -138,13 +139,13 @@ export default function LotWisePnl() {
                     <td className="py-2 pr-2">Total</td>
                     <td></td>
                     <td></td>
-                    <td className="text-right px-2">{group.lots.reduce((s, l) => s + l.buyQty * l.buyPrice, 0).toFixed(0)}</td>
+                    <td className="text-right px-2">{formatIndian(group.lots.reduce((s, l) => s + l.buyQty * l.buyPrice, 0))}</td>
                     <td></td>
                     <td></td>
                     <td></td>
-                    <td className="text-right px-2">{group.lots.reduce((s, l) => s + l.sells.reduce((s2, sl) => s2 + sl.qty * sl.price, 0), 0).toFixed(0)}</td>
+                    <td className="text-right px-2">{formatIndian(group.lots.reduce((s, l) => s + l.sells.reduce((s2, sl) => s2 + sl.qty * sl.price, 0), 0))}</td>
                     <td className={`text-right px-2 font-semibold ${group.lots.reduce((s, l) => s + l.sellTotalPnl, 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      {group.lots.reduce((s, l) => s + l.sellTotalPnl, 0) >= 0 ? '+' : ''}{group.lots.reduce((s, l) => s + l.sellTotalPnl, 0).toFixed(0)}
+                      {group.lots.reduce((s, l) => s + l.sellTotalPnl, 0) >= 0 ? '+' : ''}{formatIndian(group.lots.reduce((s, l) => s + l.sellTotalPnl, 0))}
                     </td>
                     <td className="text-right pl-2">{group.lots.reduce((s, l) => s + l.remainingQty, 0)}</td>
                   </tr>

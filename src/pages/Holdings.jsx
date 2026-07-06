@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { calculateHoldings, calculateSummary } from '../lib/pnlCalc'
+import { formatIndian } from '../lib/format'
 
 export default function Holdings() {
   const [allTxns, setAllTxns] = useState([])
@@ -78,12 +79,12 @@ export default function Holdings() {
       <div className="bg-gray-900 rounded-xl p-4">
         <div className="flex justify-between items-center mb-1">
           <p className="text-sm text-gray-400">Total Invested</p>
-          <p className="text-xl font-bold">₹{summary.totalInvested.toLocaleString()}</p>
+          <p className="text-sm md:text-xl font-bold">₹{formatIndian(summary.totalInvested)}</p>
         </div>
         <div className="flex justify-between items-center">
           <p className="text-sm text-gray-400">Realized P&L</p>
-          <p className={`text-lg font-semibold ${summary.totalRealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {summary.totalRealizedPnl >= 0 ? '+' : ''}₹{summary.totalRealizedPnl.toLocaleString()}
+          <p className={`text-sm md:text-lg font-semibold ${summary.totalRealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+            {summary.totalRealizedPnl >= 0 ? '+' : ''}₹{formatIndian(summary.totalRealizedPnl)}
           </p>
         </div>
       </div>
@@ -101,12 +102,12 @@ export default function Holdings() {
               <div>
                 <p className="font-semibold text-lg">{h.symbol}</p>
                 <p className="text-xs text-gray-500">{h.qty} shares</p>
-                <p className="text-xs text-gray-600">Avg cost: ₹{h.avgCost.toLocaleString()}</p>
+                <p className="text-xs text-gray-600">Avg cost: ₹{formatIndian(h.avgCost)}</p>
               </div>
               <div className="text-right">
-                <p className="font-medium">₹{h.invested.toLocaleString()}</p>
+                <p className="font-medium">₹{formatIndian(h.invested)}</p>
                 <p className={`text-sm ${h.realizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  Realized: {h.realizedPnl >= 0 ? '+' : ''}₹{h.realizedPnl.toLocaleString()}
+                  Realized: {h.realizedPnl >= 0 ? '+' : ''}₹{formatIndian(h.realizedPnl)}
                 </p>
               </div>
             </div>

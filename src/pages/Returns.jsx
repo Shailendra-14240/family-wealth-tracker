@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
+import { formatIndian } from '../lib/format'
 
 export default function Returns() {
   const [accounts, setAccounts] = useState([])
@@ -264,15 +265,15 @@ export default function Returns() {
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-gray-900 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-400">Total Deposits</p>
-          <p className="text-lg font-bold text-green-400">+₹{totalDeposits.toLocaleString()}</p>
+          <p className="text-sm md:text-lg font-bold text-green-400">+₹{formatIndian(totalDeposits)}</p>
         </div>
         <div className="bg-gray-900 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-400">Total Withdrawals</p>
-          <p className="text-lg font-bold text-red-400">-₹{totalWithdrawals.toLocaleString()}</p>
+          <p className="text-sm md:text-lg font-bold text-red-400">-₹{formatIndian(totalWithdrawals)}</p>
         </div>
         <div className="bg-gray-900 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-400">Net Added</p>
-          <p className="text-lg font-bold text-blue-400">₹{netAdded.toLocaleString()}</p>
+          <p className="text-sm md:text-lg font-bold text-blue-400">₹{formatIndian(netAdded)}</p>
         </div>
       </div>
 
@@ -280,20 +281,20 @@ export default function Returns() {
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-gray-900 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-400">Holdings Value</p>
-          <p className="text-lg font-bold text-purple-400">₹{totalHoldingsVal.toLocaleString()}</p>
+          <p className="text-sm md:text-lg font-bold text-purple-400">₹{formatIndian(totalHoldingsVal)}</p>
         </div>
         <div className="bg-gray-900 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-400">Available Cash</p>
-          <p className="text-lg font-bold text-yellow-400">₹{totalCash.toLocaleString()}</p>
+          <p className="text-sm md:text-lg font-bold text-yellow-400">₹{formatIndian(totalCash)}</p>
           {accountData.some(a => a.netMarginBlocked > 0) && (
             <p className="text-[10px] text-gray-500 mt-0.5">
-              (includes ₹{accountData.reduce((s, a) => s + a.netMarginBlocked, 0).toLocaleString()} blocked margin)
+              (includes ₹{formatIndian(accountData.reduce((s, a) => s + a.netMarginBlocked, 0))} blocked margin)
             </p>
           )}
         </div>
         <div className="bg-gray-900 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-400">Total Value</p>
-          <p className="text-lg font-bold text-white">₹{totalValue.toLocaleString()}</p>
+          <p className="text-sm md:text-lg font-bold text-white">₹{formatIndian(totalValue)}</p>
         </div>
       </div>
 
@@ -301,13 +302,13 @@ export default function Returns() {
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-gray-900 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-400">Total P&L</p>
-          <p className={`text-xl font-bold ${totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {totalPnl >= 0 ? '+' : ''}₹{totalPnl.toLocaleString()}
+          <p className={`text-sm md:text-xl font-bold ${totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+            {totalPnl >= 0 ? '+' : ''}₹{formatIndian(totalPnl)}
           </p>
         </div>
         <div className="bg-gray-900 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-400">Return %</p>
-          <p className={`text-xl font-bold ${returnPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          <p className={`text-sm md:text-xl font-bold ${returnPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
             {returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}%
           </p>
         </div>
@@ -324,11 +325,11 @@ export default function Returns() {
                 <div key={a.accountId} className="text-xs border-b border-gray-800 pb-2 last:border-0">
                   <p className="font-medium text-gray-300 mb-1">{acct?.name || `Account #${a.accountId}`}</p>
                   <div className="grid grid-cols-5 gap-1 text-gray-500">
-                    <span>Net: <span className="text-blue-400">₹{a.netAdded.toLocaleString()}</span></span>
-                    <span>Holdings: <span className="text-purple-400">₹{a.holdingsVal.toLocaleString()}</span></span>
-                    <span>Cash: <span className="text-yellow-400">₹{a.availableCash.toLocaleString()}</span></span>
-                    {a.netMarginBlocked > 0 && <span className="text-[10px] text-gray-600 self-center">(₹{a.netMarginBlocked.toLocaleString()} blocked)</span>}
-                    <span>P&L: <span className={a.pnl >= 0 ? 'text-green-400' : 'text-red-400'}>{a.pnl >= 0 ? '+' : ''}₹{a.pnl.toLocaleString()}</span></span>
+                    <span>Net: <span className="text-blue-400">₹{formatIndian(a.netAdded)}</span></span>
+                    <span>Holdings: <span className="text-purple-400">₹{formatIndian(a.holdingsVal)}</span></span>
+                    <span>Cash: <span className="text-yellow-400">₹{formatIndian(a.availableCash)}</span></span>
+                    {a.netMarginBlocked > 0 && <span className="text-[10px] text-gray-600 self-center">(₹{formatIndian(a.netMarginBlocked)} blocked)</span>}
+                    <span>P&L: <span className={a.pnl >= 0 ? 'text-green-400' : 'text-red-400'}>{a.pnl >= 0 ? '+' : ''}₹{formatIndian(a.pnl)}</span></span>
                   </div>
                 </div>
               )
@@ -352,8 +353,8 @@ export default function Returns() {
         {parsedLedger && (
           <div className="mt-2 space-y-1 text-xs">
             <p className="text-gray-400">{parsedLedger.rows.length} rows from {parsedLedger.fileName}</p>
-            <p className="text-green-400">Deposits: +₹{parsedLedger.rows.filter(r => r.voucher_type === 'Bank Receipts').reduce((s, r) => s + r.credit, 0).toLocaleString()}</p>
-            <p className="text-red-400">Withdrawals: -₹{parsedLedger.rows.filter(r => r.voucher_type === 'Bank Payments').reduce((s, r) => s + r.debit, 0).toLocaleString()}</p>
+            <p className="text-green-400">Deposits: +₹{formatIndian(parsedLedger.rows.filter(r => r.voucher_type === 'Bank Receipts').reduce((s, r) => s + r.credit, 0))}</p>
+            <p className="text-red-400">Withdrawals: -₹{formatIndian(parsedLedger.rows.filter(r => r.voucher_type === 'Bank Payments').reduce((s, r) => s + r.debit, 0))}</p>
             <p className="text-xs text-yellow-500">Replaces existing ledger data for this account</p>
             <button onClick={handleConfirmLedger} disabled={uploadingLedger || !selectedAccount}
               className="bg-purple-600 text-white px-3 py-1 rounded text-xs mt-1">
@@ -389,7 +390,7 @@ export default function Returns() {
               <div key={m.id} className="flex justify-between items-center text-sm py-1 border-b border-gray-800 last:border-0">
                 <span className="text-gray-500 w-24 text-xs">{m.date}</span>
                 <span className={`font-medium w-20 ${m.type === 'deposit' ? 'text-green-400' : 'text-red-400'}`}>
-                  {m.type === 'deposit' ? '+' : '-'}₹{Number(m.amount).toLocaleString()}
+                  {m.type === 'deposit' ? '+' : '-'}₹{formatIndian(m.amount)}
                 </span>
                 <span className="text-gray-500 flex-1 text-xs truncate px-2">{m.notes}</span>
                 <button onClick={() => handleDeleteMovement(m.id)} className="text-red-500 text-xs hover:text-red-400">✕</button>
@@ -414,7 +415,7 @@ export default function Returns() {
             className="text-sm text-gray-400 file:mr-3 file:bg-green-600 file:text-white file:border-0 file:rounded file:px-3 file:py-1" />
           {parsedCsv && (
             <div className="mt-2 flex gap-3 items-center">
-              <p className="text-xs text-gray-400">{parsedCsv.count} holdings · Total: <span className="text-purple-400 font-semibold">₹{parsedCsv.total.toLocaleString()}</span></p>
+              <p className="text-xs text-gray-400">{parsedCsv.count} holdings · Total: <span className="text-purple-400 font-semibold">₹{formatIndian(parsedCsv.total)}</span></p>
               <button onClick={async () => {
                 if (!supabase) return
                 setAdding(true)
@@ -440,7 +441,7 @@ export default function Returns() {
             {filteredSnapshots.map(s => (
               <div key={s.id} className="flex justify-between items-center text-sm py-1 border-b border-gray-800 last:border-0">
                 <span className="text-gray-500 w-24 text-xs">{s.date}</span>
-                <span className="font-medium text-purple-400 w-28">₹{Number(s.total_value).toLocaleString()}</span>
+                <span className="font-medium text-purple-400 w-28">₹{formatIndian(s.total_value)}</span>
                 <span className="text-gray-600 text-xs w-16">{s.method}</span>
                 <span className="text-gray-500 flex-1 text-xs truncate px-2">{s.notes}</span>
                 <button onClick={() => handleDeleteSnapshot(s.id)} className="text-red-500 text-xs hover:text-red-400">✕</button>

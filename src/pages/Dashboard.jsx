@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { calculateHoldings, calculateSummary } from '../lib/pnlCalc'
+import { formatIndian } from '../lib/format'
 
 export default function Dashboard() {
   const [accounts, setAccounts] = useState([])
@@ -53,10 +54,10 @@ export default function Dashboard() {
     <div className="space-y-4">
       <div className="bg-gray-900 rounded-xl p-4 text-center">
         <p className="text-sm text-gray-400">Net Worth</p>
-        <p className="text-3xl font-bold">₹{netWorth.toLocaleString()}</p>
+        <p className="text-xl md:text-3xl font-bold">₹{formatIndian(netWorth)}</p>
         <div className="flex justify-center gap-6 mt-2 text-sm">
-          <span className="text-green-400">+₹{assets.toLocaleString()}</span>
-          <span className="text-red-400">-₹{Math.abs(liabilities).toLocaleString()}</span>
+          <span className="text-green-400">+₹{formatIndian(assets)}</span>
+          <span className="text-red-400">-₹{formatIndian(Math.abs(liabilities))}</span>
         </div>
       </div>
 
@@ -67,12 +68,12 @@ export default function Dashboard() {
         </div>
         <div className="bg-gray-900 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-400">Invested</p>
-          <p className="text-xl font-bold text-blue-400">₹{summary.totalInvested.toLocaleString()}</p>
+          <p className="text-sm md:text-xl font-bold text-blue-400">₹{formatIndian(summary.totalInvested)}</p>
         </div>
         <div className="bg-gray-900 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-400">Realized P&L</p>
-          <p className={`text-xl font-bold ${summary.totalRealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {summary.totalRealizedPnl >= 0 ? '+' : ''}₹{summary.totalRealizedPnl.toLocaleString()}
+          <p className={`text-sm md:text-xl font-bold ${summary.totalRealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+            {summary.totalRealizedPnl >= 0 ? '+' : ''}₹{formatIndian(summary.totalRealizedPnl)}
           </p>
         </div>
       </div>
@@ -94,14 +95,14 @@ export default function Dashboard() {
                 <p className="text-xs text-gray-500 capitalize">{acct.type}</p>
               </div>
               <p className={`font-semibold ${acct.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                ₹{Number(acct.balance).toLocaleString()}
+                ₹{formatIndian(acct.balance)}
               </p>
             </div>
             {(acct.invested !== 0 || acct.realizedPnl !== 0) && (
               <div className="flex gap-4 text-xs text-gray-400 border-t border-gray-800 pt-1.5 mt-1">
-                <span>Invested: <span className="text-blue-400">₹{acct.invested.toLocaleString()}</span></span>
+                <span>Invested: <span className="text-blue-400">₹{formatIndian(acct.invested)}</span></span>
                 <span>P&L: <span className={acct.realizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}>
-                  {acct.realizedPnl >= 0 ? '+' : ''}₹{acct.realizedPnl.toLocaleString()}
+                  {acct.realizedPnl >= 0 ? '+' : ''}₹{formatIndian(acct.realizedPnl)}
                 </span></span>
               </div>
             )}
