@@ -3,7 +3,7 @@ const FORMATS = [
     id: 'zerodha',
     label: 'Zerodha Kite',
     detect: (headers) =>
-      headers.some(h => /^symbol$/i.test(h) && /trade_date/i.test(h)) ||
+      (headers.some(h => /^symbol$/i.test(h)) && headers.some(h => /trade_date/i.test(h))) ||
       (headers.some(h => /tradingsymbol/i.test(h)) && (headers.some(h => /transaction_type/i.test(h)) || headers.some(h => /^trade_type$/i.test(h)))),
     map: (headers) => ({
       date: headers.findIndex(h => /trade.?date/i.test(h)),
@@ -56,6 +56,8 @@ const FORMATS = [
       trade_type: () => -1,
       qty: headers.findIndex(h => /qty|quantity/i.test(h)),
       price: headers.findIndex(h => /price|rate|cost|avg/i.test(h)),
+      order_id: headers.findIndex(h => /^trade_id$|^order_id$/i.test(h)),
+      order_execution_time: headers.findIndex(h => /order_execution_time|trade_time/i.test(h)),
     }),
   },
 ]

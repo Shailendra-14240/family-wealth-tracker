@@ -92,8 +92,10 @@ export default function Transactions() {
 
     try {
       let rows = parsed.rows.map(r => ({ ...r, account_id: csvAccountId || null }))
-      const orderIds = rows.map(r => r.order_id).filter(Boolean)
+      const acct = csvAccountId || null
 
+      // Dedup by order_id
+      const orderIds = rows.map(r => r.order_id).filter(Boolean)
       if (orderIds.length) {
         const chunkSize = 500
         const existingIds = new Set()
@@ -107,6 +109,16 @@ export default function Transactions() {
         }
         rows = rows.filter(r => !r.order_id || !existingIds.has(r.order_id))
       }
+
+      // Fallback dedup by (date,symbol,type,qty,price,account_id) against existing rows (including null-order_id)
+      const { data: existingTxns } = await supabase
+        .from('transactions')
+        .select('date,symbol,type,qty,price,account_id')
+        .eq('account_id', acct)
+      const existingFingerprints = new Set(
+        (existingTxns || []).map(t => `${t.date}|${t.symbol}|${t.type}|${t.qty}|${t.price}|${t.account_id}`)
+      )
+      rows = rows.filter(r => !existingFingerprints.has(`${r.date}|${r.symbol}|${r.type}|${r.qty}|${r.price}|${r.account_id}`))
 
       const skipped = parsed.rows.length - rows.length
       if (!rows.length) {

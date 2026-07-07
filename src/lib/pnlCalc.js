@@ -316,7 +316,7 @@ export function consolidateLotRecords(pnlData) {
 function buildEvents(allTxns, corporateActions, demergerMap) {
   const events = []
   for (const t of allTxns) {
-    events.push({ type: t.type, date: t.date, symbol: t.symbol, qty: Number(t.qty), price: Number(t.price) })
+    events.push({ type: t.type, date: t.date, symbol: t.symbol, qty: Number(t.qty), price: Number(t.price), _idx: t.id || 0 })
   }
   const processed = new Set()
   for (const a of (corporateActions || [])) {
@@ -324,19 +324,24 @@ function buildEvents(allTxns, corporateActions, demergerMap) {
     if (a.action === 'demerger') {
       const key = `${a.date}|${a.symbol}`
       if (demergerMap[key] && !processed.has(key)) {
-        events.push({ type: 'demerger', date: a.date, symbol: a.symbol, children: demergerMap[key].children })
+        events.push({ type: 'demerger', date: a.date, symbol: a.symbol, children: demergerMap[key].children, _idx: null })
         processed.add(key)
       }
       continue
     }
-    events.push({ type: a.action, date: a.date, symbol: a.symbol, ratio_from: Number(a.ratio_from), ratio_to: Number(a.ratio_to) })
+    events.push({ type: a.action, date: a.date, symbol: a.symbol, ratio_from: Number(a.ratio_from), ratio_to: Number(a.ratio_to), _idx: null })
   }
   events.sort((a, b) => {
     const da = new Date(a.date), db = new Date(b.date)
     if (da - db !== 0) return da - db
-    // Same date: buys first, then corporate actions, then sells
-    const order = { buy: 0, bonus: 1, split: 2, demerger: 3, sell: 4 }
-    return (order[a.type] ?? 5) - (order[b.type] ?? 5)
+    // Same date: corporate actions (bonus, split, demerger) come after all trades
+    const isTxnA = a._idx != null, isTxnB = b._idx != null
+    if (isTxnA !== isTxnB) return isTxnA ? -1 : 1
+    // Both are transactions: preserve original order (by id)
+    if (isTxnA) return a._idx - b._idx
+    // Both are corporate actions: bonus before split before demerger
+    const order = { bonus: 0, split: 1, demerger: 2 }
+    return (order[a.type] ?? 9) - (order[b.type] ?? 9)
   })
   return events
 }
