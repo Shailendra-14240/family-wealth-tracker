@@ -6,8 +6,10 @@ import { formatIndian } from '../lib/format'
 export default function LotWisePnl() {
   const [transactions, setTransactions] = useState([])
   const [corpActions, setCorpActions] = useState([])
+  const [accounts, setAccounts] = useState([])
   const [loading, setLoading] = useState(true)
   const [filterSymbol, setFilterSymbol] = useState('')
+  const [filterAccount, setFilterAccount] = useState('')
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo, setFilterDateTo] = useState('')
   const [showClosedOnly, setShowClosedOnly] = useState(false)
@@ -18,18 +20,25 @@ export default function LotWisePnl() {
     Promise.all([
       supabase.from('transactions').select('*').order('date'),
       supabase.from('corporate_actions').select('*'),
-    ]).then(([txRes, caRes]) => {
+      supabase.from('accounts').select('id, name').order('name'),
+    ]).then(([txRes, caRes, acctRes]) => {
       if (txRes.data) setTransactions(txRes.data)
       if (caRes.data) setCorpActions(caRes.data)
+      if (acctRes.data) setAccounts(acctRes.data)
       setLoading(false)
     })
   }, [])
 
+  const txnsForAccount = useMemo(() => {
+    if (!filterAccount) return transactions
+    return transactions.filter(t => Number(t.account_id) === Number(filterAccount))
+  }, [transactions, filterAccount])
+
   const pnlData = useMemo(() => {
-    if (!transactions.length) return []
-    const raw = calculateLotWisePnl(transactions, corpActions)
+    if (!txnsForAccount.length) return []
+    const raw = calculateLotWisePnl(txnsForAccount, corpActions)
     return doConsolidate ? consolidateLotRecords(raw) : raw
-  }, [transactions, corpActions, doConsolidate])
+  }, [txnsForAccount, corpActions, doConsolidate])
 
   const symbols = useMemo(() => pnlData.map(d => d.symbol).sort(), [pnlData])
 
@@ -55,6 +64,10 @@ export default function LotWisePnl() {
       <h2 className="text-lg font-semibold">Lot-wise P&L</h2>
 
       <div className="flex flex-wrap gap-2 bg-gray-900 rounded-xl p-3">
+        <select className="bg-gray-800 rounded px-2 py-1 text-sm" value={filterAccount} onChange={e => setFilterAccount(e.target.value)}>
+          <option value="">All Accounts</option>
+          {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
         <select className="bg-gray-800 rounded px-2 py-1 text-sm" value={filterSymbol} onChange={e => setFilterSymbol(e.target.value)}>
           <option value="">All Symbols</option>
           {symbols.map(s => <option key={s} value={s}>{s}</option>)}
