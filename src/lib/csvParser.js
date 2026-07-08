@@ -101,14 +101,29 @@ function parseValue(val) {
   return parseFloat(cleaned) || 0
 }
 
-function parseDate(val) {
+function detectDateFormat(lines) {
+  let mmdd = 0, ddmm = 0
+  for (let i = 1; i < Math.min(lines.length, 20); i++) {
+    const parts = lines[i].match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/)
+    if (parts) {
+      const a = parseInt(parts[1], 10), b = parseInt(parts[2], 10)
+      if (a > 12) ddmm++
+      else if (b > 12) mmdd++
+    }
+  }
+  return mmdd > ddmm ? 'mmdd' : 'ddmm'
+}
+
+function parseDate(val, fmt) {
   if (!val) return new Date().toISOString().split('T')[0]
   const v = val.toString().trim()
   const parts = v.match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/)
   if (parts) {
-    let m = parseInt(parts[1], 10), d = parseInt(parts[2], 10), y = parts[3]
-    if (d > 12) { let t = m; m = d; d = t }
-    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    let a = parseInt(parts[1], 10), b = parseInt(parts[2], 10), y = parts[3]
+    if (a > 12) return `${y}-${String(b).padStart(2, '0')}-${String(a).padStart(2, '0')}`
+    if (b > 12) return `${y}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}`
+    if (fmt === 'mmdd') return `${y}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}`
+    return `${y}-${String(b).padStart(2, '0')}-${String(a).padStart(2, '0')}`
   }
   const d = new Date(v)
   if (!isNaN(d.getTime())) return d.toISOString().split('T')[0]
@@ -141,6 +156,8 @@ export function parseCSV(text, formatId) {
   const rows = []
   const errors = []
 
+  const dateFmt = detectDateFormat(lines.slice(0, Math.min(lines.length, 20)))
+
   for (let i = 1; i < lines.length; i++) {
     const cols = lines[i].split(',').map(c => c.replace(/["']/g, '').trim())
     const raw = {}
@@ -155,7 +172,7 @@ export function parseCSV(text, formatId) {
         type: normaliseType(raw.type, raw.trade_type),
         qty: parseValue(raw.qty),
         price: parseValue(raw.price),
-        date: parseDate(raw.date),
+        date: parseDate(raw.date, dateFmt),
         order_id: !isSentinel(raw.trade_id) ? (raw.trade_id || null) : rawOrderId,
         order_execution_time: raw.order_execution_time || null,
         _raw_order_id: rawOrderId,
