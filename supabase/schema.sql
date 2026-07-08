@@ -28,11 +28,14 @@ create table transactions (
   price               numeric(12,2) not null,
   order_id            text,
   order_execution_time timestamptz,
+  source_order_id     text,
+  source_file         text,
   notes               text,
   created_at          timestamptz default now()
 );
 
-create unique index idx_transactions_order_id on transactions(order_id) where order_id is not null;
+create index idx_transactions_order_id on transactions(order_id) where order_id is not null;
+create index idx_transactions_source_file on transactions(source_file);
 
 create table corporate_actions (
   id          bigint generated always as identity primary key,

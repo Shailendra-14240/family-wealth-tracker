@@ -334,14 +334,10 @@ function buildEvents(allTxns, corporateActions, demergerMap) {
   events.sort((a, b) => {
     const da = new Date(a.date), db = new Date(b.date)
     if (da - db !== 0) return da - db
-    // Same date: corporate actions (bonus, split, demerger) come after all trades
-    const isTxnA = a._idx != null, isTxnB = b._idx != null
-    if (isTxnA !== isTxnB) return isTxnA ? -1 : 1
-    // Both are transactions: preserve original order (by id)
-    if (isTxnA) return a._idx - b._idx
-    // Both are corporate actions: bonus before split before demerger
-    const order = { bonus: 0, split: 1, demerger: 2 }
-    return (order[a.type] ?? 9) - (order[b.type] ?? 9)
+    // Same date: buys first, then corporate actions, then sells
+    // (FIFO needs buys before sells so sells always have lots to match)
+    const order = { buy: 0, bonus: 1, split: 2, demerger: 3, sell: 4 }
+    return (order[a.type] ?? 5) - (order[b.type] ?? 5)
   })
   return events
 }

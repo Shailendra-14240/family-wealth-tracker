@@ -1,3 +1,9 @@
+const SENTINEL_ORDER_ID = /^(DISCREPANT|TRANSFEROUT|IPO)$/i
+
+function isSentinel(val) {
+  return val && SENTINEL_ORDER_ID.test(val.toString().trim())
+}
+
 const FORMATS = [
   {
     id: 'zerodha',
@@ -12,7 +18,8 @@ const FORMATS = [
       trade_type: headers.findIndex(h => /^trade.?type$/i.test(h)),
       qty: headers.findIndex(h => /^quantity$/i.test(h)),
       price: headers.findIndex(h => /^price$/i.test(h) || /average.?price/i.test(h)),
-      order_id: headers.findIndex(h => /^trade_id$/i.test(h)),
+      trade_id: headers.findIndex(h => /^trade_id$/i.test(h)),
+      order_id: headers.findIndex(h => /^order_id$/i.test(h)),
       order_execution_time: headers.findIndex(h => /order_execution_time|trade_time/i.test(h)),
     }),
   },
@@ -56,7 +63,8 @@ const FORMATS = [
       trade_type: () => -1,
       qty: headers.findIndex(h => /qty|quantity/i.test(h)),
       price: headers.findIndex(h => /price|rate|cost|avg/i.test(h)),
-      order_id: headers.findIndex(h => /^trade_id$|^order_id$/i.test(h)),
+      trade_id: headers.findIndex(h => /^trade_id$/i.test(h)),
+      order_id: headers.findIndex(h => /^order_id$/i.test(h)),
       order_execution_time: headers.findIndex(h => /order_execution_time|trade_time/i.test(h)),
     }),
   },
@@ -124,6 +132,7 @@ export function parseCSV(text, formatId) {
 
   const colIdx = fmt.map(rawHeaders)
   const missing = Object.entries(colIdx).filter(([, v]) => typeof v === 'number' && v === -1).map(([k]) => k)
+    .filter((k) => !(k === 'type' && colIdx.trade_type >= 0))
 
   const rows = []
   const errors = []
@@ -136,18 +145,20 @@ export function parseCSV(text, formatId) {
     }
 
     try {
+      const rawOrderId = !isSentinel(raw.order_id) ? (raw.order_id || null) : null
       const row = {
         symbol: normaliseSymbol(raw.symbol),
         type: normaliseType(raw.type, raw.trade_type),
         qty: parseValue(raw.qty),
         price: parseValue(raw.price),
         date: parseDate(raw.date),
-        order_id: raw.order_id || null,
+        order_id: !isSentinel(raw.trade_id) ? (raw.trade_id || null) : rawOrderId,
         order_execution_time: raw.order_execution_time || null,
+        _raw_order_id: rawOrderId,
       }
       if (!row.symbol) { errors.push(`Row ${i + 1}: missing symbol`); continue }
       if (row.qty <= 0) { errors.push(`Row ${i + 1}: invalid qty (${raw.qty})`); continue }
-      if (row.price <= 0) { errors.push(`Row ${i + 1}: invalid price (${raw.price})`); continue }
+      if (row.price < 0) { errors.push(`Row ${i + 1}: invalid price (${raw.price})`); continue }
       rows.push(row)
     } catch (e) {
       errors.push(`Row ${i + 1}: ${e.message}`)

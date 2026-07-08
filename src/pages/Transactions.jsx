@@ -16,6 +16,7 @@ export default function Transactions() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const fileRef = useRef()
+  const [currentFile, setCurrentFile] = useState('')
   const [broker, setBroker] = useState('')
   const [csvAccountId, setCsvAccountId] = useState('')
   const [filterAccountId, setFilterAccountId] = useState('')
@@ -70,6 +71,7 @@ export default function Transactions() {
   const handleFileSelect = (e) => {
     const file = fileRef.current?.files?.[0]
     if (!file) return
+    setCurrentFile(file.name)
     setUploadStatus(null)
     setParsed(null)
     setParsing(true)
@@ -91,10 +93,19 @@ export default function Transactions() {
     setUploadStatus({ type: 'info', msg: 'Checking duplicates...' })
 
     try {
-      let rows = parsed.rows.map(r => ({ ...r, account_id: csvAccountId || null }))
+      let rows = parsed.rows.map(r => {
+        const { _raw_order_id: _, ...rest } = r
+        return {
+          ...rest,
+          account_id: csvAccountId || null,
+          notes: currentFile
+            ? (r.notes ? r.notes + '\n' : '') + 'source: ' + currentFile
+            : r.notes || null,
+        }
+      })
       const acct = csvAccountId || null
 
-      // Dedup by order_id
+      // Dedup by order_id (skip sentinel values like DISCREPANT)
       const orderIds = rows.map(r => r.order_id).filter(Boolean)
       if (orderIds.length) {
         const chunkSize = 500
@@ -188,6 +199,7 @@ export default function Transactions() {
         {parsed && (
           <div className="mt-3 space-y-2">
             <p className="text-xs text-gray-500">Detected format: <span className="text-gray-300">{parsed.format}</span></p>
+            {currentFile && <p className="text-xs text-gray-500">File: <span className="text-gray-300">{currentFile}</span></p>}
 
             {parsed.missingColumns && (
               <p className="text-xs text-yellow-400">
