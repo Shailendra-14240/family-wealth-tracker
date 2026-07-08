@@ -105,27 +105,25 @@ export default function Transactions() {
       })
       const acct = csvAccountId || null
 
-      // Dedup by order_id (skip sentinel values like DISCREPANT)
+      // Dedup by order_id within same account
       const orderIds = rows.map(r => r.order_id).filter(Boolean)
       if (orderIds.length) {
         const chunkSize = 500
         const existingIds = new Set()
         for (let i = 0; i < orderIds.length; i += chunkSize) {
           const chunk = orderIds.slice(i, i + chunkSize)
-          const { data: existing } = await supabase
-            .from('transactions')
-            .select('order_id')
-            .in('order_id', chunk)
+          let q = supabase.from('transactions').select('order_id').in('order_id', chunk)
+          if (acct) q = q.eq('account_id', acct); else q = q.is('account_id', null)
+          const { data: existing } = await q
           if (existing) existing.forEach(r => existingIds.add(r.order_id))
         }
         rows = rows.filter(r => !r.order_id || !existingIds.has(r.order_id))
       }
 
       // Fallback dedup by (date,symbol,type,qty,price,account_id) against existing rows (including null-order_id)
-      const { data: existingTxns } = await supabase
-        .from('transactions')
-        .select('date,symbol,type,qty,price,account_id')
-        .eq('account_id', acct)
+      let q = supabase.from('transactions').select('date,symbol,type,qty,price,account_id')
+      if (acct) q = q.eq('account_id', acct); else q = q.is('account_id', null)
+      const { data: existingTxns } = await q
       const existingFingerprints = new Set(
         (existingTxns || []).map(t => `${t.date}|${t.symbol}|${t.type}|${t.qty}|${t.price}|${t.account_id}`)
       )
