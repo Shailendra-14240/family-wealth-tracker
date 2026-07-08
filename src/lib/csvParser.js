@@ -104,8 +104,12 @@ function parseValue(val) {
 function parseDate(val) {
   if (!val) return new Date().toISOString().split('T')[0]
   const v = val.toString().trim()
-  const dmy = v.match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/)
-  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`
+  const parts = v.match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/)
+  if (parts) {
+    let m = parseInt(parts[1], 10), d = parseInt(parts[2], 10), y = parts[3]
+    if (d > 12) { let t = m; m = d; d = t }
+    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  }
   const d = new Date(v)
   if (!isNaN(d.getTime())) return d.toISOString().split('T')[0]
   return new Date().toISOString().split('T')[0]
