@@ -1,4 +1,4 @@
-const SENTINEL_ORDER_ID = /^(DISCREPANT|TRANSFEROUT|IPO)$/i
+const SENTINEL_ORDER_ID = /^(DISCREPANT|TRANSFEROUT|IPO|REVERSAL)$/i
 
 function isSentinel(val) {
   return val && SENTINEL_ORDER_ID.test(val.toString().trim())
