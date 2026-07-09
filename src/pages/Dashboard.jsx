@@ -56,13 +56,23 @@ export default function Dashboard() {
     const bySymbol = {}
     for (const h of holdings) {
       if (h.qty > 0) {
-        bySymbol[h.symbol] = (bySymbol[h.symbol] || 0) + h.invested
+        if (!bySymbol[h.symbol]) {
+          bySymbol[h.symbol] = { invested: 0, qty: 0 }
+        }
+        bySymbol[h.symbol].invested += h.invested
+        bySymbol[h.symbol].qty += h.qty
       }
     }
     return Object.entries(bySymbol)
-      .sort((a, b) => b[1] - a[1])
+      .sort((a, b) => b[1].invested - a[1].invested)
       .slice(0, 10)
-      .map(([symbol, invested], i) => ({ symbol, invested: Math.round(invested), fill: COLORS[i % COLORS.length] }))
+      .map(([symbol, data], i) => ({
+        symbol,
+        invested: Math.round(data.invested),
+        qty: Math.round(data.qty),
+        avgCost: Math.round(data.qty > 0 ? data.invested / data.qty : 0),
+        fill: COLORS[i % COLORS.length],
+      }))
   }, [holdings])
 
   const pnlByAccount = useMemo(() => {
@@ -133,8 +143,21 @@ export default function Dashboard() {
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={topHoldings} layout="vertical" margin={{ left: 10, right: 10 }}>
                 <XAxis type="number" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="symbol" tick={{ fill: '#d1d5db', fontSize: 11 }} axisLine={false} tickLine={false} width={70} />
-                <Tooltip {...chartTooltipStyle} formatter={(v) => [`₹${formatIndian(v)}`, 'Invested']} />
+                <YAxis type="category" dataKey="symbol" tick={{ fill: '#d1d5db', fontSize: 11 }} axisLine={false} tickLine={false} width={75} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#f3f4f6', fontSize: '13px' }}
+                  formatter={(_, __, props) => {
+                    const d = props.payload
+                    return [
+                      <div className="text-xs space-y-0.5">
+                        <div className="text-gray-400 font-medium mb-1">{d.symbol}</div>
+                        <div>Qty: <span className="text-white font-medium">{formatIndian(d.qty)}</span></div>
+                        <div>Avg Cost: <span className="text-white font-medium">₹{formatIndian(d.avgCost)}</span></div>
+                        <div>Invested: <span className="text-blue-400 font-medium">₹{formatIndian(d.invested)}</span></div>
+                      </div>
+                    ]
+                  }}
+                />
                 <Bar dataKey="invested" radius={[0, 4, 4, 0]}>
                   {topHoldings.map((entry, i) => (
                     <Cell key={i} fill={entry.fill} />
