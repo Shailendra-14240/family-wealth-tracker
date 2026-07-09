@@ -255,7 +255,7 @@ export default function Returns() {
       <div className="bg-gray-900 rounded-xl p-4">
         <label className="text-xs text-gray-500">Account</label>
         <select value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)}
-          className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1">
+          className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm mt-1">
           <option value="">All accounts</option>
           {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
@@ -371,13 +371,13 @@ export default function Returns() {
       <div className="bg-gray-900 rounded-xl p-4">
         <p className="text-sm text-gray-400 mb-3">Manual Fund Movement</p>
         <form onSubmit={handleAddMovement} className="flex flex-wrap gap-2">
-          <input type="date" className="bg-gray-800 rounded px-2 py-1.5 text-sm flex-1 min-w-[120px]" value={fmForm.date} onChange={e => setFmForm({ ...fmForm, date: e.target.value })} />
-          <select className="bg-gray-800 rounded px-2 py-1.5 text-sm w-28" value={fmForm.type} onChange={e => setFmForm({ ...fmForm, type: e.target.value })}>
+          <input type="date" className="bg-gray-800 text-white rounded px-2 py-1.5 text-sm flex-1 min-w-[120px]" value={fmForm.date} onChange={e => setFmForm({ ...fmForm, date: e.target.value })} />
+          <select className="bg-gray-800 text-white rounded px-2 py-1.5 text-sm w-28" value={fmForm.type} onChange={e => setFmForm({ ...fmForm, type: e.target.value })}>
             <option value="deposit">Deposit</option>
             <option value="withdrawal">Withdrawal</option>
           </select>
-          <input type="number" placeholder="Amount" className="bg-gray-800 rounded px-2 py-1.5 text-sm w-28" value={fmForm.amount} onChange={e => setFmForm({ ...fmForm, amount: e.target.value })} />
-          <input type="text" placeholder="Notes" className="bg-gray-800 rounded px-2 py-1.5 text-sm flex-1 min-w-[120px]" value={fmForm.notes} onChange={e => setFmForm({ ...fmForm, notes: e.target.value })} />
+          <input type="number" placeholder="Amount" className="bg-gray-800 text-white rounded px-2 py-1.5 text-sm w-28" value={fmForm.amount} onChange={e => setFmForm({ ...fmForm, amount: e.target.value })} />
+          <input type="text" placeholder="Notes" className="bg-gray-800 text-white rounded px-2 py-1.5 text-sm flex-1 min-w-[120px]" value={fmForm.notes} onChange={e => setFmForm({ ...fmForm, notes: e.target.value })} />
           <button type="submit" disabled={adding || !selectedAccount} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm">Add</button>
         </form>
       </div>
@@ -403,9 +403,9 @@ export default function Returns() {
       <div className="bg-gray-900 rounded-xl p-4">
         <p className="text-sm text-gray-400 mb-3">Portfolio Snapshot</p>
         <form onSubmit={handleAddSnapshot} className="flex flex-wrap gap-2 mb-3">
-          <input type="date" className="bg-gray-800 rounded px-2 py-1.5 text-sm flex-1 min-w-[120px]" value={ssForm.date} onChange={e => setSsForm({ ...ssForm, date: e.target.value })} />
-          <input type="number" placeholder="Total value" className="bg-gray-800 rounded px-2 py-1.5 text-sm w-32" value={ssForm.total_value} onChange={e => setSsForm({ ...ssForm, total_value: e.target.value })} />
-          <input type="text" placeholder="Notes" className="bg-gray-800 rounded px-2 py-1.5 text-sm flex-1 min-w-[120px]" value={ssForm.notes} onChange={e => setSsForm({ ...ssForm, notes: e.target.value })} />
+          <input type="date" className="bg-gray-800 text-white rounded px-2 py-1.5 text-sm flex-1 min-w-[120px]" value={ssForm.date} onChange={e => setSsForm({ ...ssForm, date: e.target.value })} />
+          <input type="number" placeholder="Total value" className="bg-gray-800 text-white rounded px-2 py-1.5 text-sm w-32" value={ssForm.total_value} onChange={e => setSsForm({ ...ssForm, total_value: e.target.value })} />
+          <input type="text" placeholder="Notes" className="bg-gray-800 text-white rounded px-2 py-1.5 text-sm flex-1 min-w-[120px]" value={ssForm.notes} onChange={e => setSsForm({ ...ssForm, notes: e.target.value })} />
           <button type="submit" disabled={adding || !selectedAccount} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm">Save</button>
         </form>
 

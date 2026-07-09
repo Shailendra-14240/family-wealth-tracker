@@ -44,26 +44,25 @@ export default function Holdings() {
 
   return (
     <div className="space-y-4">
-      {/* Filters */}
       <div className="bg-gray-900 rounded-xl p-4 space-y-3">
         <p className="text-sm text-gray-400 font-medium">Filters</p>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-gray-500">From</label>
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-              className="w-full bg-gray-800 rounded px-2 py-1.5 text-sm mt-1" />
+              className="w-full bg-gray-800 text-white rounded px-2 py-1.5 text-sm mt-1" />
           </div>
           <div>
             <label className="text-xs text-gray-500">To</label>
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-              className="w-full bg-gray-800 rounded px-2 py-1.5 text-sm mt-1" />
+              className="w-full bg-gray-800 text-white rounded px-2 py-1.5 text-sm mt-1" />
           </div>
         </div>
         <div>
           <label className="text-xs text-gray-500">Symbols (comma-separated)</label>
           <input type="text" placeholder="RELIANCE, TCS, INFY" value={symbolFilter}
             onChange={e => setSymbolFilter(e.target.value)}
-            className="w-full bg-gray-800 rounded px-2 py-1.5 text-sm mt-1" />
+            className="w-full bg-gray-800 text-white rounded px-2 py-1.5 text-sm mt-1" />
         </div>
         <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
           <input type="checkbox" checked={currentOnly} onChange={e => setCurrentOnly(e.target.checked)}
@@ -75,11 +74,10 @@ export default function Holdings() {
         </p>
       </div>
 
-      {/* Summary */}
       <div className="bg-gray-900 rounded-xl p-4">
         <div className="flex justify-between items-center mb-1">
           <p className="text-sm text-gray-400">Total Invested</p>
-          <p className="text-sm md:text-xl font-bold">₹{formatIndian(summary.totalInvested)}</p>
+          <p className="text-sm md:text-xl font-bold text-white">₹{formatIndian(summary.totalInvested)}</p>
         </div>
         <div className="flex justify-between items-center">
           <p className="text-sm text-gray-400">Realized P&L</p>
@@ -89,7 +87,7 @@ export default function Holdings() {
         </div>
       </div>
 
-      <h2 className="text-lg font-semibold">Current Holdings</h2>
+      <h2 className="text-lg font-semibold text-white">Current Holdings</h2>
 
       {displayHoldings.length === 0 && (
         <p className="text-gray-500 text-center py-10">No holdings match the current filters.</p>
@@ -100,12 +98,12 @@ export default function Holdings() {
           <div key={h.symbol} className="bg-gray-900 rounded-xl p-4">
             <div className="flex justify-between items-start">
               <div>
-                <p className="font-semibold text-lg">{h.symbol}</p>
-                <p className="text-xs text-gray-500">{formatIndian(h.qty)} shares</p>
-                <p className="text-xs text-gray-600">Avg cost: ₹{formatIndian(h.avgCost)}</p>
+                <p className="font-semibold text-lg text-white">{h.symbol}</p>
+                <p className="text-xs text-gray-400">{formatIndian(h.qty)} shares</p>
+                <p className="text-xs text-gray-500">Avg cost: ₹{formatIndian(h.avgCost)}</p>
               </div>
               <div className="text-right">
-                <p className="font-medium">₹{formatIndian(h.invested)}</p>
+                <p className="font-medium text-white">₹{formatIndian(h.invested)}</p>
                 <p className={`text-sm ${h.realizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                   Realized: {h.realizedPnl >= 0 ? '+' : ''}₹{formatIndian(h.realizedPnl)}
                 </p>

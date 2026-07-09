@@ -85,11 +85,11 @@ export default function CorporateActions() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-gray-500">Date</label>
-              <input type="date" className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
+              <input type="date" className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm mt-1" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
             </div>
             <div>
               <label className="text-xs text-gray-500">Type</label>
-              <select className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1" value={form.action} onChange={e => setForm({ ...form, action: e.target.value })}>
+              <select className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm mt-1" value={form.action} onChange={e => setForm({ ...form, action: e.target.value })}>
                 {ACTION_TYPES.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
               </select>
             </div>
@@ -102,12 +102,12 @@ export default function CorporateActions() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-gray-500">Symbol</label>
-              <input placeholder="RELIANCE" className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1" value={form.symbol} onChange={e => setForm({ ...form, symbol: e.target.value.toUpperCase() })} />
+              <input placeholder="RELIANCE" className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm mt-1" value={form.symbol} onChange={e => setForm({ ...form, symbol: e.target.value.toUpperCase() })} />
             </div>
             {(form.action === 'merger' || form.action === 'demerger') && (
               <div>
                 <label className="text-xs text-gray-500">New Symbol</label>
-                <input placeholder={form.action === 'merger' ? 'IDFCFIRSTB' : 'TMPV'} className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1" value={form.new_symbol} onChange={e => setForm({ ...form, new_symbol: e.target.value.toUpperCase() })} />
+                <input placeholder={form.action === 'merger' ? 'IDFCFIRSTB' : 'TMPV'} className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm mt-1" value={form.new_symbol} onChange={e => setForm({ ...form, new_symbol: e.target.value.toUpperCase() })} />
               </div>
             )}
           </div>
@@ -115,29 +115,29 @@ export default function CorporateActions() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-gray-500">Ratio From</label>
-              <input type="number" step="0.0001" className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1" value={form.ratio_from} onChange={e => setForm({ ...form, ratio_from: e.target.value })} />
+              <input type="number" step="0.0001" className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm mt-1" value={form.ratio_from} onChange={e => setForm({ ...form, ratio_from: e.target.value })} />
             </div>
             <div>
               <label className="text-xs text-gray-500">Ratio To</label>
-              <input type="number" step="0.0001" className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1" value={form.ratio_to} onChange={e => setForm({ ...form, ratio_to: e.target.value })} />
+              <input type="number" step="0.0001" className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm mt-1" value={form.ratio_to} onChange={e => setForm({ ...form, ratio_to: e.target.value })} />
             </div>
           </div>
 
           {form.action === 'demerger' && (
             <div>
               <label className="text-xs text-gray-500">Retained Ratio <span className="text-gray-600">(parent shares kept per {form.ratio_from} old shares; 0 if company ceases)</span></label>
-              <input type="number" step="0.0001" className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1" value={form.retained_ratio} onChange={e => setForm({ ...form, retained_ratio: e.target.value })} placeholder="0" />
+              <input type="number" step="0.0001" className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm mt-1" value={form.retained_ratio} onChange={e => setForm({ ...form, retained_ratio: e.target.value })} placeholder="0" />
             </div>
           )}
 
           {form.action === 'demerger' && (
             <div>
               <label className="text-xs text-gray-500">Cost Share <span className="text-gray-600">(cost weight; omit for equal split)</span></label>
-              <input type="number" step="0.0001" className="w-full bg-gray-800 rounded px-3 py-2 text-sm mt-1" value={form.cost_share} onChange={e => setForm({ ...form, cost_share: e.target.value })} placeholder="e.g. 0.69" />
+              <input type="number" step="0.0001" className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm mt-1" value={form.cost_share} onChange={e => setForm({ ...form, cost_share: e.target.value })} placeholder="e.g. 0.69" />
             </div>
           )}
 
-          <input placeholder="Notes (optional)" className="w-full bg-gray-800 rounded px-3 py-2 text-sm" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+          <input placeholder="Notes (optional)" className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
           <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm">Save</button>
         </form>
       )}
@@ -147,7 +147,7 @@ export default function CorporateActions() {
           <div key={a.id} className="bg-gray-900 rounded-xl p-4">
             <div className="flex justify-between items-start">
               <div>
-                <p className="font-semibold capitalize">{a.action}</p>
+                <p className="font-semibold capitalize text-white">{a.action}</p>
                 <p className="text-xs text-gray-500">
                   {a.symbol}{a.new_symbol ? ` → ${a.new_symbol}` : ''} &middot; {a.ratio_from}:{a.ratio_to} &middot; {a.date}
                 </p>

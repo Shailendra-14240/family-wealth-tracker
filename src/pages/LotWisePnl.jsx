@@ -61,19 +61,19 @@ export default function LotWisePnl() {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold">Lot-wise P&L</h2>
+      <h2 className="text-lg font-semibold text-white">Lot-wise P&L</h2>
 
       <div className="flex flex-wrap gap-2 bg-gray-900 rounded-xl p-3">
-        <select className="bg-gray-800 rounded px-2 py-1 text-sm" value={filterAccount} onChange={e => setFilterAccount(e.target.value)}>
+        <select className="bg-gray-800 text-white rounded px-2 py-1 text-sm" value={filterAccount} onChange={e => setFilterAccount(e.target.value)}>
           <option value="">All Accounts</option>
           {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
-        <select className="bg-gray-800 rounded px-2 py-1 text-sm" value={filterSymbol} onChange={e => setFilterSymbol(e.target.value)}>
+        <select className="bg-gray-800 text-white rounded px-2 py-1 text-sm" value={filterSymbol} onChange={e => setFilterSymbol(e.target.value)}>
           <option value="">All Symbols</option>
           {symbols.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
-        <input type="date" className="bg-gray-800 rounded px-2 py-1 text-sm" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} placeholder="From" />
-        <input type="date" className="bg-gray-800 rounded px-2 py-1 text-sm" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} placeholder="To" />
+        <input type="date" className="bg-gray-800 text-white rounded px-2 py-1 text-sm" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} placeholder="From" />
+        <input type="date" className="bg-gray-800 text-white rounded px-2 py-1 text-sm" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} placeholder="To" />
         <label className="flex items-center gap-1 text-sm text-gray-400">
           <input type="checkbox" checked={showClosedOnly} onChange={e => setShowClosedOnly(e.target.checked)} />
           Closed only
@@ -89,7 +89,7 @@ export default function LotWisePnl() {
           <div key={group.symbol} className="bg-gray-900 rounded-xl p-4">
             <h3 className="font-bold text-blue-400 mb-2">{group.symbol}</h3>
             <div className="overflow-x-auto">
-              <table className="w-full text-xs">
+              <table className="w-full text-xs text-gray-300">
                 <thead>
                   <tr className="text-gray-500 border-b border-gray-800">
                     <th className="text-left py-1 pr-2">Buy Date</th>
@@ -111,7 +111,7 @@ export default function LotWisePnl() {
                     if (lot.sells.length === 0) {
                       rows.push(
                         <tr key={`${i}-open`} className="border-b border-gray-800">
-                          <td className="py-1 pr-2">{lot.buyDate}</td>
+                          <td className="py-1 pr-2 text-gray-400">{lot.buyDate}</td>
                           <td className="text-right py-1 px-2">{formatIndian(lot.buyQty)}</td>
                           <td className="text-right py-1 px-2">{formatIndian(lot.buyPrice)}</td>
                           <td className="text-right py-1 px-2">{formatIndian(buyValue)}</td>
@@ -127,12 +127,12 @@ export default function LotWisePnl() {
                       lot.sells.forEach((sell, j) => {
                         const sellValue = sell.qty * sell.price
                         rows.push(
-                          <tr key={`${i}-${j}`} className={`border-b border-gray-800 ${j === 0 ? '' : ''}`}>
-                            <td className="py-1 pr-2">{j === 0 ? lot.buyDate : ''}</td>
+                          <tr key={`${i}-${j}`} className="border-b border-gray-800">
+                            <td className="py-1 pr-2 text-gray-400">{j === 0 ? lot.buyDate : ''}</td>
                             <td className="text-right py-1 px-2">{j === 0 ? formatIndian(lot.buyQty) : ''}</td>
                             <td className="text-right py-1 px-2">{j === 0 ? formatIndian(lot.buyPrice) : ''}</td>
                             <td className="text-right py-1 px-2">{j === 0 ? formatIndian(buyValue) : ''}</td>
-                            <td className="py-1 px-2">{sell.date}</td>
+                            <td className="py-1 px-2 text-gray-400">{sell.date}</td>
                             <td className="text-right py-1 px-2">{formatIndian(sell.qty)}</td>
                             <td className="text-right py-1 px-2">{formatIndian(sell.price)}</td>
                             <td className="text-right py-1 px-2">{formatIndian(sellValue)}</td>
@@ -148,7 +148,7 @@ export default function LotWisePnl() {
                   })}
                 </tbody>
                 <tfoot>
-                  <tr className="text-gray-400 font-medium border-t border-gray-700">
+                  <tr className="text-gray-300 font-medium border-t border-gray-700">
                     <td className="py-2 pr-2">Total</td>
                     <td></td>
                     <td></td>
