@@ -75,11 +75,11 @@ export default function Holdings() {
       <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
         <div className="flex justify-between items-center">
           <span className="text-sm text-gray-400">Total Invested</span>
-          <span className="text-lg font-bold text-white">₹{formatIndian(summary.totalInvested)}</span>
+          <span className="text-base sm:text-lg md:text-xl font-bold text-white truncate">₹{formatIndian(summary.totalInvested)}</span>
         </div>
         <div className="flex justify-between items-center mt-1.5">
           <span className="text-sm text-gray-400">Realized P&L</span>
-          <span className={`text-lg font-bold ${summary.totalRealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+          <span className={`text-base sm:text-lg md:text-xl font-bold truncate ${summary.totalRealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
             {summary.totalRealizedPnl >= 0 ? '+' : ''}₹{formatIndian(summary.totalRealizedPnl)}
           </span>
         </div>

@@ -265,15 +265,15 @@ export default function Returns() {
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3 md:p-4 text-center">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Total Deposits</p>
-          <p className="text-lg md:text-xl font-bold tracking-tight text-emerald-400">+₹{formatIndian(totalDeposits)}</p>
+          <p className="text-sm sm:text-base md:text-lg font-bold tracking-tight truncate text-emerald-400">+₹{formatIndian(totalDeposits)}</p>
         </div>
         <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3 md:p-4 text-center">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Total Withdrawals</p>
-          <p className="text-lg md:text-xl font-bold tracking-tight text-red-400">-₹{formatIndian(totalWithdrawals)}</p>
+          <p className="text-sm sm:text-base md:text-lg font-bold tracking-tight truncate text-red-400">-₹{formatIndian(totalWithdrawals)}</p>
         </div>
         <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3 md:p-4 text-center">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Net Added</p>
-          <p className="text-lg md:text-xl font-bold tracking-tight text-blue-400">₹{formatIndian(netAdded)}</p>
+          <p className="text-sm sm:text-base md:text-lg font-bold tracking-tight truncate text-blue-400">₹{formatIndian(netAdded)}</p>
         </div>
       </div>
 
@@ -281,11 +281,11 @@ export default function Returns() {
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3 md:p-4 text-center">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Holdings Value</p>
-          <p className="text-lg md:text-xl font-bold tracking-tight text-purple-400">₹{formatIndian(totalHoldingsVal)}</p>
+          <p className="text-sm sm:text-base md:text-lg font-bold tracking-tight truncate text-purple-400">₹{formatIndian(totalHoldingsVal)}</p>
         </div>
         <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3 md:p-4 text-center">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Available Cash</p>
-          <p className="text-lg md:text-xl font-bold tracking-tight text-yellow-400">₹{formatIndian(totalCash)}</p>
+          <p className="text-sm sm:text-base md:text-lg font-bold tracking-tight truncate text-yellow-400">₹{formatIndian(totalCash)}</p>
           {accountData.some(a => a.netMarginBlocked > 0) && (
             <p className="text-[10px] text-gray-500 mt-0.5">
               (includes ₹{formatIndian(accountData.reduce((s, a) => s + a.netMarginBlocked, 0))} blocked margin)
@@ -294,21 +294,20 @@ export default function Returns() {
         </div>
         <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3 md:p-4 text-center">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Total Value</p>
-          <p className="text-lg md:text-xl font-bold tracking-tight text-white">₹{formatIndian(totalValue)}</p>
+          <p className="text-sm sm:text-base md:text-lg font-bold tracking-tight truncate text-white">₹{formatIndian(totalValue)}</p>
         </div>
       </div>
 
-      {/* Row 3: P&L */}
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3 md:p-4 text-center">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Total P&amp;L</p>
-          <p className={`text-lg md:text-xl font-bold tracking-tight ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+          <p className={`text-sm sm:text-base md:text-lg font-bold tracking-tight truncate ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
             {totalPnl >= 0 ? '+' : ''}₹{formatIndian(totalPnl)}
           </p>
         </div>
         <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3 md:p-4 text-center">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Return %</p>
-          <p className={`text-lg md:text-xl font-bold tracking-tight ${returnPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+          <p className={`text-sm sm:text-base md:text-lg font-bold tracking-tight ${returnPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
             {returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}%
           </p>
         </div>

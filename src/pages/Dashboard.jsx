@@ -108,7 +108,7 @@ export default function Dashboard() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/5 via-transparent to-transparent" />
         <div className="relative">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-widest">Net Worth</p>
-          <p className="text-3xl md:text-5xl font-bold tracking-tight mt-1.5 bg-gradient-to-r from-blue-400 via-white to-purple-400 bg-clip-text text-transparent">
+          <p className="text-2xl sm:text-3xl md:text-5xl font-bold tracking-tight mt-1.5 bg-gradient-to-r from-blue-400 via-white to-purple-400 bg-clip-text text-transparent break-words">
             ₹{formatIndian(netWorth)}
           </p>
           <div className="flex gap-6 mt-3">
@@ -132,7 +132,7 @@ export default function Dashboard() {
         ].map(stat => (
           <div key={stat.label} className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3.5 md:p-4 text-center backdrop-blur-sm">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">{stat.label}</p>
-            <p className={`text-lg md:text-2xl font-bold tracking-tight mt-0.5 ${stat.color}`}>{stat.value}</p>
+            <p className={`text-sm sm:text-base md:text-xl font-bold tracking-tight mt-0.5 truncate ${stat.color}`}>{stat.value}</p>
           </div>
         ))}
       </div>
@@ -248,7 +248,7 @@ export default function Dashboard() {
                     <p className="text-xs text-gray-500 capitalize">{acct.type.replace('_', ' ')}</p>
                   </div>
                 </div>
-                <p className={`font-semibold ${Number(acct.balance) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                <p className={`font-semibold truncate max-w-[120px] ${Number(acct.balance) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                   ₹{formatIndian(acct.balance)}
                 </p>
               </div>
