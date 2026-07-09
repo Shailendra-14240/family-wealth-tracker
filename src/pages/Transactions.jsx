@@ -217,7 +217,7 @@ export default function Transactions() {
                       <span className="w-20 text-gray-500">{r.date}</span>
                       <span className="w-8 text-gray-500">{r.type.toUpperCase()}</span>
                       <span className="w-20 font-medium">{r.symbol}</span>
-                      <span className="w-12 text-right">{r.qty}</span>
+                      <span className="w-12 text-right">{formatIndian(r.qty)}</span>
                       <span className="w-16 text-right">@{formatIndian(r.price)}</span>
                     </div>
                   ))}
@@ -317,7 +317,7 @@ export default function Transactions() {
                   <div className="flex justify-between items-center">
                     <div>
                       <p className="font-semibold">{t.symbol}</p>
-                      <p className="text-xs text-gray-500">{t.type.toUpperCase()} {t.qty} @ ₹{formatIndian(t.price)} &middot; {t.date}</p>
+                      <p className="text-xs text-gray-500">{t.type.toUpperCase()} {formatIndian(t.qty)} @ ₹{formatIndian(t.price)} &middot; {t.date}</p>
                       {t.accounts?.name && <p className="text-xs text-gray-600">{t.accounts.name}</p>}
                     </div>
                     <p className="font-medium">₹{formatIndian(t.qty * t.price)}</p>

@@ -101,7 +101,7 @@ export default function Holdings() {
             <div className="flex justify-between items-start">
               <div>
                 <p className="font-semibold text-lg">{h.symbol}</p>
-                <p className="text-xs text-gray-500">{h.qty} shares</p>
+                <p className="text-xs text-gray-500">{formatIndian(h.qty)} shares</p>
                 <p className="text-xs text-gray-600">Avg cost: ₹{formatIndian(h.avgCost)}</p>
               </div>
               <div className="text-right">

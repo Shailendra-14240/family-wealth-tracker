@@ -112,15 +112,15 @@ export default function LotWisePnl() {
                       rows.push(
                         <tr key={`${i}-open`} className="border-b border-gray-800">
                           <td className="py-1 pr-2">{lot.buyDate}</td>
-                          <td className="text-right py-1 px-2">{lot.buyQty}</td>
-                          <td className="text-right py-1 px-2">{lot.buyPrice}</td>
+                          <td className="text-right py-1 px-2">{formatIndian(lot.buyQty)}</td>
+                          <td className="text-right py-1 px-2">{formatIndian(lot.buyPrice)}</td>
                           <td className="text-right py-1 px-2">{formatIndian(buyValue)}</td>
                           <td className="py-1 px-2 text-gray-600">--</td>
                           <td className="text-right py-1 px-2">--</td>
                           <td className="text-right py-1 px-2">--</td>
                           <td className="text-right py-1 px-2">--</td>
                           <td className="text-right py-1 px-2 text-gray-600">--</td>
-                          <td className="text-right py-1 pl-2 text-yellow-400">{lot.remainingQty}</td>
+                          <td className="text-right py-1 pl-2 text-yellow-400">{formatIndian(lot.remainingQty)}</td>
                         </tr>
                       )
                     } else {
@@ -129,17 +129,17 @@ export default function LotWisePnl() {
                         rows.push(
                           <tr key={`${i}-${j}`} className={`border-b border-gray-800 ${j === 0 ? '' : ''}`}>
                             <td className="py-1 pr-2">{j === 0 ? lot.buyDate : ''}</td>
-                            <td className="text-right py-1 px-2">{j === 0 ? lot.buyQty : ''}</td>
-                            <td className="text-right py-1 px-2">{j === 0 ? lot.buyPrice : ''}</td>
+                            <td className="text-right py-1 px-2">{j === 0 ? formatIndian(lot.buyQty) : ''}</td>
+                            <td className="text-right py-1 px-2">{j === 0 ? formatIndian(lot.buyPrice) : ''}</td>
                             <td className="text-right py-1 px-2">{j === 0 ? formatIndian(buyValue) : ''}</td>
                             <td className="py-1 px-2">{sell.date}</td>
-                            <td className="text-right py-1 px-2">{sell.qty}</td>
-                            <td className="text-right py-1 px-2">{sell.price}</td>
+                            <td className="text-right py-1 px-2">{formatIndian(sell.qty)}</td>
+                            <td className="text-right py-1 px-2">{formatIndian(sell.price)}</td>
                             <td className="text-right py-1 px-2">{formatIndian(sellValue)}</td>
                             <td className={`text-right py-1 px-2 font-medium ${sell.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                               {sell.pnl >= 0 ? '+' : ''}{formatIndian(sell.pnl)}
                             </td>
-                            <td className="text-right py-1 pl-2">{j === lot.sells.length - 1 ? lot.remainingQty : ''}</td>
+                            <td className="text-right py-1 pl-2">{j === lot.sells.length - 1 ? formatIndian(lot.remainingQty) : ''}</td>
                           </tr>
                         )
                       })
@@ -160,7 +160,7 @@ export default function LotWisePnl() {
                     <td className={`text-right px-2 font-semibold ${group.lots.reduce((s, l) => s + l.sellTotalPnl, 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                       {group.lots.reduce((s, l) => s + l.sellTotalPnl, 0) >= 0 ? '+' : ''}{formatIndian(group.lots.reduce((s, l) => s + l.sellTotalPnl, 0))}
                     </td>
-                    <td className="text-right pl-2">{group.lots.reduce((s, l) => s + l.remainingQty, 0)}</td>
+                    <td className="text-right pl-2">{formatIndian(group.lots.reduce((s, l) => s + l.remainingQty, 0))}</td>
                   </tr>
                 </tfoot>
               </table>
