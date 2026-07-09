@@ -56,9 +56,7 @@ export default function Dashboard() {
     const bySymbol = {}
     for (const h of holdings) {
       if (h.qty > 0) {
-        if (!bySymbol[h.symbol]) {
-          bySymbol[h.symbol] = { invested: 0, qty: 0 }
-        }
+        if (!bySymbol[h.symbol]) bySymbol[h.symbol] = { invested: 0, qty: 0 }
         bySymbol[h.symbol].invested += h.invested
         bySymbol[h.symbol].qty += h.qty
       }
@@ -95,10 +93,6 @@ export default function Dashboard() {
     return items.filter(d => d.value > 0)
   }, [summary, accounts])
 
-  const chartTooltipStyle = {
-    contentStyle: { backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#f3f4f6', fontSize: '13px' },
-  }
-
   if (!supabase) return <p className="text-gray-500 text-center mt-10">Connect Supabase to see live data</p>
   if (loading) return <p className="text-gray-500 text-center mt-10">Loading...</p>
 
@@ -106,51 +100,58 @@ export default function Dashboard() {
   const liabilities = accounts.filter((a) => a.balance < 0).reduce((s, a) => s + Number(a.balance), 0)
   const netWorth = assets + liabilities + summary.totalInvested
 
+  const tooltipContent = { backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#f3f4f6', fontSize: '13px' }
+
   return (
     <div className="space-y-4">
-      <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl p-4 md:p-6 text-center border border-gray-700/50 shadow-lg">
-        <p className="text-xs md:text-sm text-gray-400 uppercase tracking-wider">Net Worth</p>
-        <p className="text-2xl md:text-4xl font-bold mt-1 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-          ₹{formatIndian(netWorth)}
-        </p>
-        <div className="flex justify-center gap-4 md:gap-8 mt-2 text-xs md:text-sm">
-          <span className="text-green-400">+₹{formatIndian(assets)}</span>
-          <span className="text-red-400">-₹{formatIndian(Math.abs(liabilities))}</span>
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600/10 via-gray-900 to-purple-600/10 border border-gray-800/50 p-5 md:p-7">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/5 via-transparent to-transparent" />
+        <div className="relative">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-widest">Net Worth</p>
+          <p className="text-3xl md:text-5xl font-bold tracking-tight mt-1.5 bg-gradient-to-r from-blue-400 via-white to-purple-400 bg-clip-text text-transparent">
+            ₹{formatIndian(netWorth)}
+          </p>
+          <div className="flex gap-6 mt-3">
+            <span className="flex items-center gap-1.5 text-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              <span className="text-emerald-400 font-medium">+₹{formatIndian(assets)}</span>
+            </span>
+            <span className="flex items-center gap-1.5 text-sm">
+              <span className="w-2 h-2 rounded-full bg-red-400" />
+              <span className="text-red-400 font-medium">-₹{formatIndian(Math.abs(liabilities))}</span>
+            </span>
+          </div>
         </div>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
-        <div className="bg-gray-900 rounded-xl p-3 md:p-4 text-center border border-gray-800">
-          <p className="text-xs text-gray-400">Accounts</p>
-          <p className="text-lg md:text-2xl font-bold text-white">{accounts.length}</p>
-        </div>
-        <div className="bg-gray-900 rounded-xl p-3 md:p-4 text-center border border-gray-800">
-          <p className="text-xs text-gray-400">Invested</p>
-          <p className="text-sm md:text-xl font-bold text-blue-400">₹{formatIndian(summary.totalInvested)}</p>
-        </div>
-        <div className="bg-gray-900 rounded-xl p-3 md:p-4 text-center border border-gray-800">
-          <p className="text-xs text-gray-400">Realized P&L</p>
-          <p className={`text-sm md:text-xl font-bold ${summary.totalRealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {summary.totalRealizedPnl >= 0 ? '+' : ''}₹{formatIndian(summary.totalRealizedPnl)}
-          </p>
-        </div>
+        {[
+          { label: 'Accounts', value: accounts.length, color: 'text-white' },
+          { label: 'Invested', value: `₹${formatIndian(summary.totalInvested)}`, color: 'text-blue-400' },
+          { label: 'Realized P&L', value: `${summary.totalRealizedPnl >= 0 ? '+' : ''}₹${formatIndian(summary.totalRealizedPnl)}`, color: summary.totalRealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400' },
+        ].map(stat => (
+          <div key={stat.label} className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3.5 md:p-4 text-center backdrop-blur-sm">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">{stat.label}</p>
+            <p className={`text-lg md:text-2xl font-bold tracking-tight mt-0.5 ${stat.color}`}>{stat.value}</p>
+          </div>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-          <p className="text-sm text-gray-400 mb-3">Top Holdings</p>
+        <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Top Holdings</p>
           {topHoldings.length > 0 ? (
             <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={topHoldings} layout="vertical" margin={{ left: 10, right: 10 }}>
-                <XAxis type="number" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="symbol" tick={{ fill: '#d1d5db', fontSize: 11 }} axisLine={false} tickLine={false} width={75} />
+              <BarChart data={topHoldings} layout="vertical" margin={{ left: 5, right: 10 }}>
+                <XAxis type="number" tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="symbol" tick={{ fill: '#d1d5db', fontSize: 11 }} axisLine={false} tickLine={false} width={70} />
                 <Tooltip
-                  contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#f3f4f6', fontSize: '13px' }}
+                  contentStyle={tooltipContent}
                   formatter={(_, __, props) => {
                     const d = props.payload
                     return [
-                      <div className="text-xs space-y-0.5">
-                        <div className="text-gray-400 font-medium mb-1">{d.symbol}</div>
+                      <div className="text-xs space-y-1">
+                        <div className="text-gray-300 font-medium mb-1">{d.symbol}</div>
                         <div>Qty: <span className="text-white font-medium">{formatIndian(d.qty)}</span></div>
                         <div>Avg Cost: <span className="text-white font-medium">₹{formatIndian(d.avgCost)}</span></div>
                         <div>Invested: <span className="text-blue-400 font-medium">₹{formatIndian(d.invested)}</span></div>
@@ -159,9 +160,7 @@ export default function Dashboard() {
                   }}
                 />
                 <Bar dataKey="invested" radius={[0, 4, 4, 0]}>
-                  {topHoldings.map((entry, i) => (
-                    <Cell key={i} fill={entry.fill} />
-                  ))}
+                  {topHoldings.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -170,19 +169,17 @@ export default function Dashboard() {
           )}
         </div>
 
-        <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-          <p className="text-sm text-gray-400 mb-3">P&L by Account</p>
+        <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">P&L by Account</p>
           {pnlByAccount.length > 0 ? (
             <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={pnlByAccount} margin={{ top: 0, right: 10, bottom: 0, left: 0 }}>
+              <BarChart data={pnlByAccount} margin={{ top: 0, right: 10, bottom: 0, left: -10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
                 <XAxis dataKey="name" tick={{ fill: '#d1d5db', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <Tooltip {...chartTooltipStyle} formatter={(v) => [`₹${formatIndian(v)}`, 'P&L']} />
+                <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={tooltipContent} formatter={(v) => [`₹${formatIndian(v)}`, 'P&L']} />
                 <Bar dataKey="pnl" radius={[4, 4, 0, 0]}>
-                  {pnlByAccount.map((entry, i) => (
-                    <Cell key={i} fill={entry.pnl >= 0 ? '#22c55e' : '#ef4444'} />
-                  ))}
+                  {pnlByAccount.map((entry, i) => <Cell key={i} fill={entry.pnl >= 0 ? '#22c55e' : '#ef4444'} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -191,26 +188,24 @@ export default function Dashboard() {
           )}
         </div>
 
-        <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-          <p className="text-sm text-gray-400 mb-3">Portfolio Composition</p>
+        <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Portfolio Composition</p>
           {portfolioComposition.length > 0 ? (
-            <div className="flex items-center gap-4">
+            <div className="flex items-center justify-center gap-4">
               <ResponsiveContainer width="60%" height={200}>
                 <PieChart>
-                  <Pie data={portfolioComposition} cx="50%" cy="50%" innerRadius={45} outerRadius={75} dataKey="value" paddingAngle={2}>
-                    {portfolioComposition.map((entry, i) => (
-                      <Cell key={i} fill={entry.color} />
-                    ))}
+                  <Pie data={portfolioComposition} cx="50%" cy="50%" innerRadius={45} outerRadius={75} dataKey="value" paddingAngle={3}>
+                    {portfolioComposition.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                   </Pie>
-                  <Tooltip {...chartTooltipStyle} formatter={(v, name) => [`₹${formatIndian(v)}`, name]} />
+                  <Tooltip contentStyle={tooltipContent} formatter={(v, name) => [`₹${formatIndian(v)}`, name]} />
                 </PieChart>
               </ResponsiveContainer>
-              <div className="space-y-2 text-xs">
+              <div className="space-y-2.5 text-xs">
                 {portfolioComposition.map((entry) => (
                   <div key={entry.name} className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
                     <span className="text-gray-400">{entry.name}</span>
-                    <span className="text-gray-300 font-medium">₹{formatIndian(entry.value)}</span>
+                    <span className="text-gray-200 font-medium">₹{formatIndian(entry.value)}</span>
                   </div>
                 ))}
               </div>
@@ -220,57 +215,57 @@ export default function Dashboard() {
           )}
         </div>
 
-        <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-          <p className="text-sm text-gray-400 mb-3">Net Worth Trend</p>
+        <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Net Worth Trend</p>
           {snapshots.length > 1 ? (
             <ResponsiveContainer width="100%" height={260}>
               <LineChart data={snapshots}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-                <XAxis dataKey="date" tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <Tooltip {...chartTooltipStyle} formatter={(v) => [`₹${formatIndian(v)}`, 'Net Worth']} />
+                <XAxis dataKey="date" tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={tooltipContent} formatter={(v) => [`₹${formatIndian(v)}`, 'Net Worth']} />
                 <Line type="monotone" dataKey="net_worth" stroke="#3b82f6" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           ) : (
-            <div className="h-48 flex items-center justify-center text-gray-600 text-sm border border-dashed border-gray-700 rounded-lg">
-              {snapshots.length === 1
-                ? 'Add more snapshots to see a trend'
-                : 'Add net worth entries in Returns page'}
+            <div className="h-48 flex items-center justify-center text-gray-600 text-sm">
+              {snapshots.length === 1 ? 'Add more snapshots to see a trend' : 'Add net worth entries in Returns page'}
             </div>
           )}
         </div>
       </div>
 
-      <h2 className="text-lg font-semibold text-white mt-2">Accounts</h2>
-      <div className="space-y-2">
-        {perAccount.map((acct) => (
-          <div key={acct.id} className="bg-gray-900 rounded-xl p-4 border border-gray-800 hover:border-gray-700 transition-colors">
-            <div className="flex justify-between items-center mb-1">
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${Number(acct.balance) >= 0 ? 'bg-green-400' : 'bg-red-400'}`} />
-                <div>
-                  <p className="font-medium text-white">{acct.name}</p>
-                  <p className="text-xs text-gray-500 capitalize">{acct.type}</p>
+      <div>
+        <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-3">Accounts</h2>
+        <div className="space-y-2">
+          {perAccount.map((acct) => (
+            <div key={acct.id} className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4 hover:border-gray-700/50 transition-colors">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className={`w-2.5 h-2.5 rounded-full ${Number(acct.balance) >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                  <div>
+                    <p className="font-medium text-white">{acct.name}</p>
+                    <p className="text-xs text-gray-500 capitalize">{acct.type.replace('_', ' ')}</p>
+                  </div>
                 </div>
+                <p className={`font-semibold ${Number(acct.balance) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  ₹{formatIndian(acct.balance)}
+                </p>
               </div>
-              <p className={`font-semibold ${Number(acct.balance) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                ₹{formatIndian(acct.balance)}
-              </p>
+              {(acct.invested !== 0 || acct.realizedPnl !== 0) && (
+                <div className="flex gap-4 mt-2 pt-2 border-t border-gray-800/50 text-xs">
+                  <span className="text-gray-500">Invested: <span className="text-blue-400 font-medium">₹{formatIndian(acct.invested)}</span></span>
+                  <span className="text-gray-500">P&L: <span className={`font-medium ${acct.realizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {acct.realizedPnl >= 0 ? '+' : ''}₹{formatIndian(acct.realizedPnl)}
+                  </span></span>
+                </div>
+              )}
             </div>
-            {(acct.invested !== 0 || acct.realizedPnl !== 0) && (
-              <div className="flex gap-4 text-xs text-gray-400 border-t border-gray-800 pt-1.5 mt-1">
-                <span>Invested: <span className="text-blue-400">₹{formatIndian(acct.invested)}</span></span>
-                <span>P&L: <span className={acct.realizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}>
-                  {acct.realizedPnl >= 0 ? '+' : ''}₹{formatIndian(acct.realizedPnl)}
-                </span></span>
-              </div>
-            )}
-          </div>
-        ))}
-        {perAccount.length === 0 && (
-          <p className="text-center text-gray-500 text-sm py-4">No accounts with data</p>
-        )}
+          ))}
+          {perAccount.length === 0 && (
+            <p className="text-center text-gray-500 text-sm py-4">No accounts with data</p>
+          )}
+        </div>
       </div>
     </div>
   )

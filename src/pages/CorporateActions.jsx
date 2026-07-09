@@ -76,20 +76,20 @@ export default function CorporateActions() {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h2 className="text-lg font-semibold">Corporate Actions</h2>
-        <button onClick={() => setShowForm(!showForm)} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm">+ Add</button>
+        <h2 className="text-lg font-semibold text-white">Corporate Actions</h2>
+        <button onClick={() => setShowForm(!showForm)} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">+ Add</button>
       </div>
 
       {showForm && (
-        <form onSubmit={handleAdd} className="bg-gray-900 rounded-xl p-4 space-y-3">
+        <form onSubmit={handleAdd} className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-gray-500">Date</label>
-              <input type="date" className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm mt-1" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
+              <label className="text-xs text-gray-500 mb-1 block">Date</label>
+              <input type="date" className="w-full bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm mt-1" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
             </div>
             <div>
-              <label className="text-xs text-gray-500">Type</label>
-              <select className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm mt-1" value={form.action} onChange={e => setForm({ ...form, action: e.target.value })}>
+              <label className="text-xs text-gray-500 mb-1 block">Type</label>
+              <select className="w-full bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm mt-1" value={form.action} onChange={e => setForm({ ...form, action: e.target.value })}>
                 {ACTION_TYPES.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
               </select>
             </div>
@@ -101,57 +101,58 @@ export default function CorporateActions() {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-gray-500">Symbol</label>
-              <input placeholder="RELIANCE" className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm mt-1" value={form.symbol} onChange={e => setForm({ ...form, symbol: e.target.value.toUpperCase() })} />
+              <label className="text-xs text-gray-500 mb-1 block">Symbol</label>
+              <input placeholder="RELIANCE" className="w-full bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm placeholder:text-gray-600" value={form.symbol} onChange={e => setForm({ ...form, symbol: e.target.value.toUpperCase() })} />
             </div>
             {(form.action === 'merger' || form.action === 'demerger') && (
               <div>
-                <label className="text-xs text-gray-500">New Symbol</label>
-                <input placeholder={form.action === 'merger' ? 'IDFCFIRSTB' : 'TMPV'} className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm mt-1" value={form.new_symbol} onChange={e => setForm({ ...form, new_symbol: e.target.value.toUpperCase() })} />
+                <label className="text-xs text-gray-500 mb-1 block">New Symbol</label>
+                <input placeholder={form.action === 'merger' ? 'IDFCFIRSTB' : 'TMPV'} className="w-full bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm placeholder:text-gray-600" value={form.new_symbol} onChange={e => setForm({ ...form, new_symbol: e.target.value.toUpperCase() })} />
               </div>
             )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-gray-500">Ratio From</label>
-              <input type="number" step="0.0001" className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm mt-1" value={form.ratio_from} onChange={e => setForm({ ...form, ratio_from: e.target.value })} />
+              <label className="text-xs text-gray-500 mb-1 block">Ratio From</label>
+              <input type="number" step="0.0001" className="w-full bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm" value={form.ratio_from} onChange={e => setForm({ ...form, ratio_from: e.target.value })} />
             </div>
             <div>
-              <label className="text-xs text-gray-500">Ratio To</label>
-              <input type="number" step="0.0001" className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm mt-1" value={form.ratio_to} onChange={e => setForm({ ...form, ratio_to: e.target.value })} />
+              <label className="text-xs text-gray-500 mb-1 block">Ratio To</label>
+              <input type="number" step="0.0001" className="w-full bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm" value={form.ratio_to} onChange={e => setForm({ ...form, ratio_to: e.target.value })} />
             </div>
           </div>
 
           {form.action === 'demerger' && (
             <div>
-              <label className="text-xs text-gray-500">Retained Ratio <span className="text-gray-600">(parent shares kept per {form.ratio_from} old shares; 0 if company ceases)</span></label>
-              <input type="number" step="0.0001" className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm mt-1" value={form.retained_ratio} onChange={e => setForm({ ...form, retained_ratio: e.target.value })} placeholder="0" />
+              <label className="text-xs text-gray-500 mb-1 block">Retained Ratio <span className="text-gray-600">(parent shares kept per {form.ratio_from} old shares; 0 if company ceases)</span></label>
+              <input type="number" step="0.0001" className="w-full bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm placeholder:text-gray-600" value={form.retained_ratio} onChange={e => setForm({ ...form, retained_ratio: e.target.value })} placeholder="0" />
             </div>
           )}
 
           {form.action === 'demerger' && (
             <div>
-              <label className="text-xs text-gray-500">Cost Share <span className="text-gray-600">(cost weight; omit for equal split)</span></label>
-              <input type="number" step="0.0001" className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm mt-1" value={form.cost_share} onChange={e => setForm({ ...form, cost_share: e.target.value })} placeholder="e.g. 0.69" />
+              <label className="text-xs text-gray-500 mb-1 block">Cost Share <span className="text-gray-600">(cost weight; omit for equal split)</span></label>
+              <input type="number" step="0.0001" className="w-full bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm placeholder:text-gray-600" value={form.cost_share} onChange={e => setForm({ ...form, cost_share: e.target.value })} placeholder="e.g. 0.69" />
             </div>
           )}
 
-          <input placeholder="Notes (optional)" className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
-          <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm">Save</button>
+          <label className="text-xs text-gray-500 mb-1 block">Notes</label>
+          <input placeholder="Notes (optional)" className="w-full bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm placeholder:text-gray-600" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+          <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">Save</button>
         </form>
       )}
 
       <div className="space-y-2">
         {actions.map((a) => (
-          <div key={a.id} className="bg-gray-900 rounded-xl p-4">
+          <div key={a.id} className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
             <div className="flex justify-between items-start">
               <div>
                 <p className="font-semibold capitalize text-white">{a.action}</p>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-400">
                   {a.symbol}{a.new_symbol ? ` → ${a.new_symbol}` : ''} &middot; {a.ratio_from}:{a.ratio_to} &middot; {a.date}
                 </p>
-                {a.notes && <p className="text-xs text-gray-600">{a.notes}</p>}
+                {a.notes && <p className="text-xs text-gray-500">{a.notes}</p>}
               </div>
               <button onClick={() => handleDelete(a.id)} className="text-red-400 text-xs">Delete</button>
             </div>

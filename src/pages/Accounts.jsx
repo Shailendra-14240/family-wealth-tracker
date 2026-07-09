@@ -39,29 +39,32 @@ export default function Accounts() {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h2 className="text-lg font-semibold">Accounts</h2>
-        <button onClick={() => setShowForm(!showForm)} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm">+ Add</button>
+        <h2 className="text-lg font-semibold text-white">Accounts</h2>
+        <button onClick={() => setShowForm(!showForm)} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">+ Add</button>
       </div>
 
       {showForm && (
-        <form onSubmit={handleAdd} className="bg-gray-900 rounded-xl p-4 space-y-3">
-          <input placeholder="Account name" className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <select className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+        <form onSubmit={handleAdd} className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4 space-y-3">
+          <label className="text-xs text-gray-500 mb-1 block">Account name</label>
+          <input placeholder="Account name" className="w-full bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm placeholder:text-gray-600" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <label className="text-xs text-gray-500 mb-1 block">Type</label>
+          <select className="w-full bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
             {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{t.replace('_', ' ')}</option>)}
           </select>
-          <input type="number" placeholder="Balance (negative for loans)" className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm" value={form.balance} onChange={(e) => setForm({ ...form, balance: e.target.value })} />
-          <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm">Save</button>
+          <label className="text-xs text-gray-500 mb-1 block">Balance</label>
+          <input type="number" placeholder="Balance (negative for loans)" className="w-full bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm placeholder:text-gray-600" value={form.balance} onChange={(e) => setForm({ ...form, balance: e.target.value })} />
+          <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">Save</button>
         </form>
       )}
 
       <div className="space-y-2">
         {accounts.map((acct) => (
-          <div key={acct.id} className="bg-gray-900 rounded-xl p-4 flex justify-between items-center">
+          <div key={acct.id} className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4 flex justify-between items-center">
             <div>
               <p className="font-medium text-white">{acct.name}</p>
               <p className="text-xs text-gray-500 capitalize">{acct.type.replace('_', ' ')}</p>
             </div>
-            <p className={`font-semibold ${acct.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+            <p className={`font-semibold ${acct.balance >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
               ₹{formatIndian(acct.balance)}
             </p>
           </div>

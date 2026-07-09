@@ -168,16 +168,16 @@ export default function Transactions() {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-lg font-semibold">Transactions</h2>
-        <button onClick={() => setShowForm(!showForm)} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm">+ Add</button>
+        <button onClick={() => setShowForm(!showForm)} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">+ Add</button>
       </div>
 
-      <div className="bg-gray-900 rounded-xl p-4">
-        <p className="text-sm text-gray-400 mb-2">Upload trade history (CSV)</p>
+      <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Upload trade history (CSV)</p>
         <div className="flex gap-2 mb-3">
-          <select value={broker} onChange={(e) => setBroker(e.target.value)} className="bg-gray-800 text-white rounded px-3 py-1.5 text-sm flex-1">
+          <select value={broker} onChange={(e) => setBroker(e.target.value)} className="bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm placeholder:text-gray-600 flex-1">
             {BROKERS.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
           </select>
-          <select value={csvAccountId} onChange={(e) => setCsvAccountId(e.target.value)} className="bg-gray-800 text-white rounded px-3 py-1.5 text-sm flex-1">
+          <select value={csvAccountId} onChange={(e) => setCsvAccountId(e.target.value)} className="bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm placeholder:text-gray-600 flex-1">
             <option value="">Select account</option>
             {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
@@ -187,7 +187,7 @@ export default function Transactions() {
           type="file"
           accept=".csv"
           onChange={handleFileSelect}
-          className="text-sm text-gray-400 file:mr-3 file:bg-blue-600 file:text-white file:border-0 file:rounded file:px-3 file:py-1"
+          className="text-sm text-gray-400 file:mr-3 file:bg-blue-600 file:hover:bg-blue-500 file:text-white file:border-0 file:rounded-lg file:px-3 file:py-2 file:text-sm file:font-medium file:transition-colors"
         />
 
         {parsing && (
@@ -211,25 +211,25 @@ export default function Transactions() {
 
             {parsed.rows.length > 0 && (
               <>
-                <div className="max-h-40 overflow-y-auto space-y-1 bg-gray-800 text-white rounded p-2">
+                <div className="max-h-40 overflow-y-auto space-y-1 rounded-xl bg-gray-900/60 border border-gray-800/50 p-2">
                   {parsed.rows.slice(0, 10).map((r, i) => (
                     <div key={i} className="text-xs flex gap-3 text-gray-300">
                       <span className="w-20 text-gray-500">{r.date}</span>
                       <span className="w-8 text-gray-500">{r.type.toUpperCase()}</span>
-                      <span className="w-20 font-medium">{r.symbol}</span>
+                      <span className="w-20 font-semibold text-white">{r.symbol}</span>
                       <span className="w-12 text-right">{formatIndian(r.qty)}</span>
                       <span className="w-16 text-right">@{formatIndian(r.price)}</span>
                     </div>
                   ))}
                   {parsed.rows.length > 10 && (
-                    <p className="text-xs text-gray-600">...and {parsed.rows.length - 10} more</p>
-                  )}
+                      <p className="text-xs text-gray-600">...and {parsed.rows.length - 10} more</p>
+                    )}
                 </div>
 
                 <button
                   onClick={handleConfirmUpload}
                   disabled={uploading}
-                  className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm w-full"
+                  className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors w-full"
                 >
                   {uploading ? 'Uploading...' : `Upload ${parsed.rows.length} transactions`}
                 </button>
@@ -255,48 +255,49 @@ export default function Transactions() {
       </div>
 
       {showForm && (
-        <form onSubmit={handleAdd} className="bg-gray-900 rounded-xl p-4 space-y-3">
+        <form onSubmit={handleAdd} className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4 space-y-3">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Add Transaction</p>
           <div className="grid grid-cols-2 gap-3">
-            <input type="date" className="bg-gray-800 text-white rounded px-3 py-2 text-sm" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-            <select className="bg-gray-800 text-white rounded px-3 py-2 text-sm" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+            <input type="date" className="bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm placeholder:text-gray-600" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+            <select className="bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm placeholder:text-gray-600" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
               <option value="buy">Buy</option>
               <option value="sell">Sell</option>
             </select>
           </div>
-          <input placeholder="Symbol (e.g. RELIANCE)" className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm" value={form.symbol} onChange={(e) => setForm({ ...form, symbol: e.target.value.toUpperCase().replace(/#/g, '').replace(/\d+$/, '') })} />
+          <input placeholder="Symbol (e.g. RELIANCE)" className="w-full bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm placeholder:text-gray-600" value={form.symbol} onChange={(e) => setForm({ ...form, symbol: e.target.value.toUpperCase().replace(/#/g, '').replace(/\d+$/, '') })} />
           <div className="grid grid-cols-2 gap-3">
-            <input type="number" placeholder="Qty" className="bg-gray-800 text-white rounded px-3 py-2 text-sm" value={form.qty} onChange={(e) => setForm({ ...form, qty: e.target.value })} />
-            <input type="number" placeholder="Price" className="bg-gray-800 text-white rounded px-3 py-2 text-sm" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+            <input type="number" placeholder="Qty" className="bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm placeholder:text-gray-600" value={form.qty} onChange={(e) => setForm({ ...form, qty: e.target.value })} />
+            <input type="number" placeholder="Price" className="bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm placeholder:text-gray-600" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
           </div>
-          <select className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm" value={form.account_id} onChange={(e) => setForm({ ...form, account_id: e.target.value })}>
+          <select className="w-full bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm placeholder:text-gray-600" value={form.account_id} onChange={(e) => setForm({ ...form, account_id: e.target.value })}>
             <option value="">No account</option>
             {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
-          <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm">Save</button>
+          <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">Save</button>
         </form>
       )}
 
-      <div className="bg-gray-900 rounded-xl p-4 space-y-3">
-        <p className="text-xs text-gray-400 font-medium">Filters</p>
+      <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4 space-y-3">
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Filters</p>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-gray-500">From</label>
+            <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">From</label>
             <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)}
-              className="w-full bg-gray-800 text-white rounded px-2 py-1.5 text-sm mt-1" />
+              className="w-full bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm placeholder:text-gray-600 mt-1" />
           </div>
           <div>
-            <label className="text-xs text-gray-500">To</label>
+            <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">To</label>
             <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)}
-              className="w-full bg-gray-800 text-white rounded px-2 py-1.5 text-sm mt-1" />
+              className="w-full bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm placeholder:text-gray-600 mt-1" />
           </div>
         </div>
         <div className="flex gap-2">
-          <select value={filterAccountId} onChange={(e) => setFilterAccountId(e.target.value)} className="bg-gray-800 text-white rounded px-3 py-1.5 text-sm flex-1">
+          <select value={filterAccountId} onChange={(e) => setFilterAccountId(e.target.value)} className="bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm placeholder:text-gray-600 flex-1">
             <option value="">All accounts</option>
             {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
           <input type="text" placeholder="Symbol" value={filterSymbol} onChange={e => setFilterSymbol(e.target.value.toUpperCase())}
-            className="bg-gray-800 text-white rounded px-3 py-1.5 text-sm w-28" />
+            className="bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm placeholder:text-gray-600 w-28" />
         </div>
       </div>
 
@@ -311,9 +312,9 @@ export default function Transactions() {
           const hasMore = filtered.length > shown.length
           return (
             <>
-              <p className="text-xs text-gray-500 mb-1">{filtered.length} of {txns.length} transactions</p>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">{filtered.length} of {txns.length} transactions</p>
               {shown.map((t) => (
-                <div key={t.id} className="bg-gray-900 rounded-xl p-4">
+                <div key={t.id} className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4 hover:border-gray-700/50 transition-colors">
                   <div className="flex justify-between items-center">
                     <div>
                       <p className="font-semibold text-white">{t.symbol}</p>
@@ -326,7 +327,7 @@ export default function Transactions() {
               ))}
               {hasMore && (
                 <button onClick={() => setVisibleCount(v => v + 200)}
-                  className="w-full text-center text-sm text-blue-400 py-2 hover:text-blue-300">
+                className="w-full text-center text-sm text-blue-400 py-2 hover:text-blue-300">
                   Show {Math.min(200, filtered.length - shown.length)} more ({filtered.length - shown.length} remaining)
                 </button>
               )}

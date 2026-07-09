@@ -133,7 +133,7 @@ export default function Returns() {
         const cols = lines[i].split(',').map(c => c.replace(/["']/g, '').trim())
         if (cols.length < 2) continue
         let date = cols[dateIdx] || ''
-        if (!date && rows.length === 0) continue // skip Opening Balance (first row with no date)
+        if (!date && rows.length === 0) continue // skip opening balance (first row with no date)
         if (date) lastDate = date
         else date = lastDate // Closing Balance inherits last seen date
         rows.push({
@@ -250,12 +250,12 @@ export default function Returns() {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold">Returns Calculator</h2>
+      <h2 className="text-lg font-semibold text-white">Returns Calculator</h2>
 
-      <div className="bg-gray-900 rounded-xl p-4">
-        <label className="text-xs text-gray-500">Account</label>
+      <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
+        <label className="text-xs text-gray-500 mb-1 block">Account</label>
         <select value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)}
-          className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm mt-1">
+          className="w-full bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm">
           <option value="">All accounts</option>
           {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
@@ -263,52 +263,52 @@ export default function Returns() {
 
       {/* Row 1: Fund flow */}
       <div className="grid grid-cols-3 gap-3">
-        <div className="bg-gray-900 rounded-xl p-3 text-center">
-          <p className="text-xs text-gray-400">Total Deposits</p>
-          <p className="text-sm md:text-lg font-bold text-green-400">+₹{formatIndian(totalDeposits)}</p>
+        <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3 md:p-4 text-center">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Total Deposits</p>
+          <p className="text-lg md:text-xl font-bold tracking-tight text-emerald-400">+₹{formatIndian(totalDeposits)}</p>
         </div>
-        <div className="bg-gray-900 rounded-xl p-3 text-center">
-          <p className="text-xs text-gray-400">Total Withdrawals</p>
-          <p className="text-sm md:text-lg font-bold text-red-400">-₹{formatIndian(totalWithdrawals)}</p>
+        <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3 md:p-4 text-center">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Total Withdrawals</p>
+          <p className="text-lg md:text-xl font-bold tracking-tight text-red-400">-₹{formatIndian(totalWithdrawals)}</p>
         </div>
-        <div className="bg-gray-900 rounded-xl p-3 text-center">
-          <p className="text-xs text-gray-400">Net Added</p>
-          <p className="text-sm md:text-lg font-bold text-blue-400">₹{formatIndian(netAdded)}</p>
+        <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3 md:p-4 text-center">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Net Added</p>
+          <p className="text-lg md:text-xl font-bold tracking-tight text-blue-400">₹{formatIndian(netAdded)}</p>
         </div>
       </div>
 
       {/* Row 2: Current position */}
       <div className="grid grid-cols-3 gap-3">
-        <div className="bg-gray-900 rounded-xl p-3 text-center">
-          <p className="text-xs text-gray-400">Holdings Value</p>
-          <p className="text-sm md:text-lg font-bold text-purple-400">₹{formatIndian(totalHoldingsVal)}</p>
+        <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3 md:p-4 text-center">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Holdings Value</p>
+          <p className="text-lg md:text-xl font-bold tracking-tight text-purple-400">₹{formatIndian(totalHoldingsVal)}</p>
         </div>
-        <div className="bg-gray-900 rounded-xl p-3 text-center">
-          <p className="text-xs text-gray-400">Available Cash</p>
-          <p className="text-sm md:text-lg font-bold text-yellow-400">₹{formatIndian(totalCash)}</p>
+        <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3 md:p-4 text-center">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Available Cash</p>
+          <p className="text-lg md:text-xl font-bold tracking-tight text-yellow-400">₹{formatIndian(totalCash)}</p>
           {accountData.some(a => a.netMarginBlocked > 0) && (
             <p className="text-[10px] text-gray-500 mt-0.5">
               (includes ₹{formatIndian(accountData.reduce((s, a) => s + a.netMarginBlocked, 0))} blocked margin)
             </p>
           )}
         </div>
-        <div className="bg-gray-900 rounded-xl p-3 text-center">
-          <p className="text-xs text-gray-400">Total Value</p>
-          <p className="text-sm md:text-lg font-bold text-white">₹{formatIndian(totalValue)}</p>
+        <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3 md:p-4 text-center">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Total Value</p>
+          <p className="text-lg md:text-xl font-bold tracking-tight text-white">₹{formatIndian(totalValue)}</p>
         </div>
       </div>
 
       {/* Row 3: P&L */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-gray-900 rounded-xl p-3 text-center">
-          <p className="text-xs text-gray-400">Total P&L</p>
-          <p className={`text-sm md:text-xl font-bold ${totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+        <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3 md:p-4 text-center">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Total P&amp;L</p>
+          <p className={`text-lg md:text-xl font-bold tracking-tight ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
             {totalPnl >= 0 ? '+' : ''}₹{formatIndian(totalPnl)}
           </p>
         </div>
-        <div className="bg-gray-900 rounded-xl p-3 text-center">
-          <p className="text-xs text-gray-400">Return %</p>
-          <p className={`text-sm md:text-xl font-bold ${returnPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+        <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3 md:p-4 text-center">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Return %</p>
+          <p className={`text-lg md:text-xl font-bold tracking-tight ${returnPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
             {returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}%
           </p>
         </div>
@@ -316,20 +316,20 @@ export default function Returns() {
 
       {/* Per-account breakdown (only in All view) */}
       {!selectedAccount && accountData.length > 1 && (
-        <div className="bg-gray-900 rounded-xl p-4">
-          <p className="text-sm text-gray-400 mb-2">Per Account</p>
+        <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Per Account</p>
           <div className="space-y-2">
             {accountData.map(a => {
               const acct = accounts.find(x => x.id === a.accountId)
               return (
                 <div key={a.accountId} className="text-xs border-b border-gray-800 pb-2 last:border-0">
-                  <p className="font-medium text-gray-300 mb-1">{acct?.name || `Account #${a.accountId}`}</p>
+                  <p className="font-medium text-gray-200 mb-1">{acct?.name || `Account #${a.accountId}`}</p>
                   <div className="grid grid-cols-5 gap-1 text-gray-500">
                     <span>Net: <span className="text-blue-400">₹{formatIndian(a.netAdded)}</span></span>
                     <span>Holdings: <span className="text-purple-400">₹{formatIndian(a.holdingsVal)}</span></span>
                     <span>Cash: <span className="text-yellow-400">₹{formatIndian(a.availableCash)}</span></span>
                     {a.netMarginBlocked > 0 && <span className="text-[10px] text-gray-600 self-center">(₹{formatIndian(a.netMarginBlocked)} blocked)</span>}
-                    <span>P&L: <span className={a.pnl >= 0 ? 'text-green-400' : 'text-red-400'}>{a.pnl >= 0 ? '+' : ''}₹{formatIndian(a.pnl)}</span></span>
+                    <span>P&amp;L: <span className={a.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}>{a.pnl >= 0 ? '+' : ''}₹{formatIndian(a.pnl)}</span></span>
                   </div>
                 </div>
               )
@@ -339,9 +339,9 @@ export default function Returns() {
       )}
 
       {/* Ledger Upload */}
-      <div className="bg-gray-900 rounded-xl p-4">
-        <p className="text-sm text-gray-400 mb-2">Zerodha Ledger</p>
-        <p className="text-xs text-gray-600 mb-2">Upload the full ledger CSV — all rows saved as raw data.</p>
+      <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Zerodha Ledger</p>
+        <p className="text-xs text-gray-500 mb-2">Upload the full ledger CSV — all rows saved as raw data.</p>
         {!selectedAccount && <p className="text-xs text-yellow-500 mb-2">Select an account first</p>}
         <div className="flex gap-2 items-center">
           <input ref={ledgerRef} type="file" accept=".csv" onChange={handleLedgerFile}
@@ -353,7 +353,7 @@ export default function Returns() {
         {parsedLedger && (
           <div className="mt-2 space-y-1 text-xs">
             <p className="text-gray-400">{parsedLedger.rows.length} rows from {parsedLedger.fileName}</p>
-            <p className="text-green-400">Deposits: +₹{formatIndian(parsedLedger.rows.filter(r => r.voucher_type === 'Bank Receipts').reduce((s, r) => s + r.credit, 0))}</p>
+            <p className="text-emerald-400">Deposits: +₹{formatIndian(parsedLedger.rows.filter(r => r.voucher_type === 'Bank Receipts').reduce((s, r) => s + r.credit, 0))}</p>
             <p className="text-red-400">Withdrawals: -₹{formatIndian(parsedLedger.rows.filter(r => r.voucher_type === 'Bank Payments').reduce((s, r) => s + r.debit, 0))}</p>
             <p className="text-xs text-yellow-500">Replaces existing ledger data for this account</p>
             <button onClick={handleConfirmLedger} disabled={uploadingLedger || !selectedAccount}
@@ -368,28 +368,28 @@ export default function Returns() {
       </div>
 
       {/* Manual Fund Movement */}
-      <div className="bg-gray-900 rounded-xl p-4">
-        <p className="text-sm text-gray-400 mb-3">Manual Fund Movement</p>
+      <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Manual Fund Movement</p>
         <form onSubmit={handleAddMovement} className="flex flex-wrap gap-2">
-          <input type="date" className="bg-gray-800 text-white rounded px-2 py-1.5 text-sm flex-1 min-w-[120px]" value={fmForm.date} onChange={e => setFmForm({ ...fmForm, date: e.target.value })} />
-          <select className="bg-gray-800 text-white rounded px-2 py-1.5 text-sm w-28" value={fmForm.type} onChange={e => setFmForm({ ...fmForm, type: e.target.value })}>
+          <input type="date" className="bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm flex-1 min-w-[120px]" value={fmForm.date} onChange={e => setFmForm({ ...fmForm, date: e.target.value })} />
+          <select className="bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm w-28" value={fmForm.type} onChange={e => setFmForm({ ...fmForm, type: e.target.value })}>
             <option value="deposit">Deposit</option>
             <option value="withdrawal">Withdrawal</option>
           </select>
-          <input type="number" placeholder="Amount" className="bg-gray-800 text-white rounded px-2 py-1.5 text-sm w-28" value={fmForm.amount} onChange={e => setFmForm({ ...fmForm, amount: e.target.value })} />
-          <input type="text" placeholder="Notes" className="bg-gray-800 text-white rounded px-2 py-1.5 text-sm flex-1 min-w-[120px]" value={fmForm.notes} onChange={e => setFmForm({ ...fmForm, notes: e.target.value })} />
-          <button type="submit" disabled={adding || !selectedAccount} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm">Add</button>
+          <input type="number" placeholder="Amount" className="bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm w-28 placeholder:text-gray-600" value={fmForm.amount} onChange={e => setFmForm({ ...fmForm, amount: e.target.value })} />
+          <input type="text" placeholder="Notes" className="bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm flex-1 min-w-[120px] placeholder:text-gray-600" value={fmForm.notes} onChange={e => setFmForm({ ...fmForm, notes: e.target.value })} />
+          <button type="submit" disabled={adding || !selectedAccount} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">Add</button>
         </form>
       </div>
 
       {filteredMovements.length > 0 && (
-        <div className="bg-gray-900 rounded-xl p-4">
-          <p className="text-sm text-gray-400 mb-2">Manual Movements ({filteredMovements.length})</p>
+        <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Manual Movements ({filteredMovements.length})</p>
           <div className="space-y-1 max-h-48 overflow-y-auto">
             {filteredMovements.map(m => (
-              <div key={m.id} className="flex justify-between items-center text-sm py-1 border-b border-gray-800 last:border-0">
+              <div key={m.id} className="rounded-lg bg-gray-800/40 border border-gray-800/50 p-3 flex justify-between items-center text-sm">
                 <span className="text-gray-500 w-24 text-xs">{m.date}</span>
-                <span className={`font-medium w-20 ${m.type === 'deposit' ? 'text-green-400' : 'text-red-400'}`}>
+                <span className={`font-medium w-20 ${m.type === 'deposit' ? 'text-emerald-400' : 'text-red-400'}`}>
                   {m.type === 'deposit' ? '+' : '-'}₹{formatIndian(m.amount)}
                 </span>
                 <span className="text-gray-500 flex-1 text-xs truncate px-2">{m.notes}</span>
@@ -400,13 +400,13 @@ export default function Returns() {
         </div>
       )}
 
-      <div className="bg-gray-900 rounded-xl p-4">
-        <p className="text-sm text-gray-400 mb-3">Portfolio Snapshot</p>
+      <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Portfolio Snapshot</p>
         <form onSubmit={handleAddSnapshot} className="flex flex-wrap gap-2 mb-3">
-          <input type="date" className="bg-gray-800 text-white rounded px-2 py-1.5 text-sm flex-1 min-w-[120px]" value={ssForm.date} onChange={e => setSsForm({ ...ssForm, date: e.target.value })} />
-          <input type="number" placeholder="Total value" className="bg-gray-800 text-white rounded px-2 py-1.5 text-sm w-32" value={ssForm.total_value} onChange={e => setSsForm({ ...ssForm, total_value: e.target.value })} />
-          <input type="text" placeholder="Notes" className="bg-gray-800 text-white rounded px-2 py-1.5 text-sm flex-1 min-w-[120px]" value={ssForm.notes} onChange={e => setSsForm({ ...ssForm, notes: e.target.value })} />
-          <button type="submit" disabled={adding || !selectedAccount} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm">Save</button>
+          <input type="date" className="bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm flex-1 min-w-[120px]" value={ssForm.date} onChange={e => setSsForm({ ...ssForm, date: e.target.value })} />
+          <input type="number" placeholder="Total value" className="bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm w-32 placeholder:text-gray-600" value={ssForm.total_value} onChange={e => setSsForm({ ...ssForm, total_value: e.target.value })} />
+          <input type="text" placeholder="Notes" className="bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm flex-1 min-w-[120px] placeholder:text-gray-600" value={ssForm.notes} onChange={e => setSsForm({ ...ssForm, notes: e.target.value })} />
+          <button type="submit" disabled={adding || !selectedAccount} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">Save</button>
         </form>
 
         <div className="border-t border-gray-800 pt-3">
@@ -435,11 +435,11 @@ export default function Returns() {
       </div>
 
       {filteredSnapshots.length > 0 && (
-        <div className="bg-gray-900 rounded-xl p-4">
-          <p className="text-sm text-gray-400 mb-2">Snapshots ({filteredSnapshots.length})</p>
+        <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Snapshots ({filteredSnapshots.length})</p>
           <div className="space-y-1 max-h-48 overflow-y-auto">
             {filteredSnapshots.map(s => (
-              <div key={s.id} className="flex justify-between items-center text-sm py-1 border-b border-gray-800 last:border-0">
+              <div key={s.id} className="rounded-lg bg-gray-800/40 border border-gray-800/50 p-3 flex justify-between items-center text-sm">
                 <span className="text-gray-500 w-24 text-xs">{s.date}</span>
                 <span className="font-medium text-purple-400 w-28">₹{formatIndian(s.total_value)}</span>
                 <span className="text-gray-600 text-xs w-16">{s.method}</span>

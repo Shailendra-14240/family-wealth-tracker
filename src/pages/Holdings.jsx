@@ -44,50 +44,48 @@ export default function Holdings() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-gray-900 rounded-xl p-4 space-y-3">
-        <p className="text-sm text-gray-400 font-medium">Filters</p>
-        <div className="grid grid-cols-2 gap-3">
+      <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Filters</p>
+        <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
-            <label className="text-xs text-gray-500">From</label>
+            <label className="text-xs text-gray-500 mb-1 block">From</label>
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-              className="w-full bg-gray-800 text-white rounded px-2 py-1.5 text-sm mt-1" />
+              className="w-full bg-gray-800/80 border border-gray-700/50 text-white rounded-lg px-3 py-2 text-sm" />
           </div>
           <div>
-            <label className="text-xs text-gray-500">To</label>
+            <label className="text-xs text-gray-500 mb-1 block">To</label>
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-              className="w-full bg-gray-800 text-white rounded px-2 py-1.5 text-sm mt-1" />
+              className="w-full bg-gray-800/80 border border-gray-700/50 text-white rounded-lg px-3 py-2 text-sm" />
           </div>
         </div>
-        <div>
-          <label className="text-xs text-gray-500">Symbols (comma-separated)</label>
+        <div className="mb-3">
+          <label className="text-xs text-gray-500 mb-1 block">Symbols (comma-separated)</label>
           <input type="text" placeholder="RELIANCE, TCS, INFY" value={symbolFilter}
             onChange={e => setSymbolFilter(e.target.value)}
-            className="w-full bg-gray-800 text-white rounded px-2 py-1.5 text-sm mt-1" />
+            className="w-full bg-gray-800/80 border border-gray-700/50 text-white rounded-lg px-3 py-2 text-sm placeholder:text-gray-600" />
         </div>
         <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
           <input type="checkbox" checked={currentOnly} onChange={e => setCurrentOnly(e.target.checked)}
-            className="accent-blue-600 w-4 h-4" />
-          Current holdings only (qty &gt; 0)
+            className="accent-blue-500 w-4 h-4 rounded" />
+          Current holdings only
         </label>
-        <p className="text-xs text-gray-600">
-          Showing {filtered.length} of {allTxns.length} transactions
-        </p>
+        <p className="text-xs text-gray-600 mt-2">Showing {filtered.length} of {allTxns.length} transactions</p>
       </div>
 
-      <div className="bg-gray-900 rounded-xl p-4">
-        <div className="flex justify-between items-center mb-1">
-          <p className="text-sm text-gray-400">Total Invested</p>
-          <p className="text-sm md:text-xl font-bold text-white">₹{formatIndian(summary.totalInvested)}</p>
-        </div>
+      <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
         <div className="flex justify-between items-center">
-          <p className="text-sm text-gray-400">Realized P&L</p>
-          <p className={`text-sm md:text-lg font-semibold ${summary.totalRealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          <span className="text-sm text-gray-400">Total Invested</span>
+          <span className="text-lg font-bold text-white">₹{formatIndian(summary.totalInvested)}</span>
+        </div>
+        <div className="flex justify-between items-center mt-1.5">
+          <span className="text-sm text-gray-400">Realized P&L</span>
+          <span className={`text-lg font-bold ${summary.totalRealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
             {summary.totalRealizedPnl >= 0 ? '+' : ''}₹{formatIndian(summary.totalRealizedPnl)}
-          </p>
+          </span>
         </div>
       </div>
 
-      <h2 className="text-lg font-semibold text-white">Current Holdings</h2>
+      <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Current Holdings</h2>
 
       {displayHoldings.length === 0 && (
         <p className="text-gray-500 text-center py-10">No holdings match the current filters.</p>
@@ -95,17 +93,17 @@ export default function Holdings() {
 
       <div className="space-y-2">
         {displayHoldings.map((h) => (
-          <div key={h.symbol} className="bg-gray-900 rounded-xl p-4">
+          <div key={h.symbol} className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4 hover:border-gray-700/50 transition-colors">
             <div className="flex justify-between items-start">
               <div>
-                <p className="font-semibold text-lg text-white">{h.symbol}</p>
-                <p className="text-xs text-gray-400">{formatIndian(h.qty)} shares</p>
+                <p className="font-semibold text-white">{h.symbol}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{formatIndian(h.qty)} shares</p>
                 <p className="text-xs text-gray-500">Avg cost: ₹{formatIndian(h.avgCost)}</p>
               </div>
               <div className="text-right">
                 <p className="font-medium text-white">₹{formatIndian(h.invested)}</p>
-                <p className={`text-sm ${h.realizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  Realized: {h.realizedPnl >= 0 ? '+' : ''}₹{formatIndian(h.realizedPnl)}
+                <p className={`text-sm mt-0.5 ${h.realizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {h.realizedPnl >= 0 ? '+' : ''}₹{formatIndian(h.realizedPnl)}
                 </p>
               </div>
             </div>
