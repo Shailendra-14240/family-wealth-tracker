@@ -111,14 +111,14 @@ export default function Holdings() {
           <div key={h.symbol} className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3 hover:border-gray-700/50 transition-colors">
             <div className="flex justify-between items-center mb-1.5">
               <p className="font-semibold text-sm text-white">{h.symbol}</p>
-              <span className="text-[10px] text-gray-500">{formatIndian(h.qty)} shares</span>
+              <span className="text-[10px] text-gray-400">{formatIndian(h.qty)} shares</span>
             </div>
             <div className="flex justify-between items-center text-xs">
-              <span className="text-gray-500">Avg ₹{formatIndian(h.avgCost)}</span>
+              <span className="text-gray-400">Avg ₹{formatIndian(h.avgCost)}</span>
               <span className="text-white font-medium">₹{formatIndian(h.invested)}</span>
             </div>
             <div className="flex justify-between items-center text-xs mt-0.5">
-              <span className="text-gray-500">P&L</span>
+              <span className="text-gray-400">P&L</span>
               <span className={`font-medium ${h.realizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {h.realizedPnl >= 0 ? '+' : ''}₹{formatIndian(h.realizedPnl)}
               </span>

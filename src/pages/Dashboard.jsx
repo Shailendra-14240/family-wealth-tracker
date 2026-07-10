@@ -145,20 +145,18 @@ export default function Dashboard() {
               <BarChart data={topHoldings} layout="vertical" margin={{ left: 5, right: 10 }}>
                 <XAxis type="number" tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis type="category" dataKey="symbol" tick={{ fill: '#d1d5db', fontSize: 11 }} axisLine={false} tickLine={false} width={70} />
-                <Tooltip
-                  contentStyle={tooltipContent}
-                  formatter={(_, __, props) => {
-                    const d = props.payload
-                    return [
-                      <div className="text-xs space-y-1">
-                        <div className="text-gray-300 font-medium mb-1">{d.symbol}</div>
-                        <div>Qty: <span className="text-white font-medium">{formatIndian(d.qty)}</span></div>
-                        <div>Avg Cost: <span className="text-white font-medium">₹{formatIndian(d.avgCost)}</span></div>
-                        <div>Invested: <span className="text-blue-400 font-medium">₹{formatIndian(d.invested)}</span></div>
-                      </div>
-                    ]
-                  }}
-                />
+                <Tooltip content={({ active, payload }) => {
+                  if (!active || !payload?.length) return null
+                  const d = payload[0].payload
+                  return (
+                    <div className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-xs space-y-1 shadow-lg">
+                      <div className="text-gray-300 font-medium">{d.symbol}</div>
+                      <div>Qty: <span className="text-white font-medium">{formatIndian(d.qty)}</span></div>
+                      <div>Avg Cost: <span className="text-white font-medium">₹{formatIndian(d.avgCost)}</span></div>
+                      <div>Invested: <span className="text-blue-400 font-medium">₹{formatIndian(d.invested)}</span></div>
+                    </div>
+                  )
+                }} />
                 <Bar dataKey="invested" radius={[0, 4, 4, 0]}>
                   {topHoldings.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
                 </Bar>
