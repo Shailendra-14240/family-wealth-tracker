@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { calculateHoldings } from '../lib/pnlCalc'
-import { formatIndian } from '../lib/format'
+import { formatIndian, isBondSymbol } from '../lib/format'
 import { fetchPrices } from '../lib/priceFeed'
 
 export default function Holdings() {
@@ -94,7 +94,7 @@ export default function Holdings() {
     const totalInvested = enrichedOpen.reduce((s, h) => s + h.invested, 0)
     const totalRealizedPnl = holdings.reduce((s, h) => s + h.realizedPnl, 0)
     const totalUnrealizedPnl = enrichedOpen.reduce((s, h) => s + (h.unrealizedPnl ?? 0), 0)
-    const missingPrices = enrichedOpen.filter(h => h.currentPrice == null).length
+    const missingPrices = enrichedOpen.filter(h => h.currentPrice == null && !isBondSymbol(h.symbol)).length
     return {
       totalInvested: Math.round(totalInvested * 100) / 100,
       totalRealizedPnl: Math.round(totalRealizedPnl * 100) / 100,
@@ -198,8 +198,11 @@ export default function Holdings() {
                     </span>
                   </div>
                 )}
-                {h.currentPrice == null && priceTs && (
+                {h.currentPrice == null && priceTs && !isBondSymbol(h.symbol) && (
                   <div className="text-[10px] text-gray-600 mt-0.5">LTP N/A</div>
+                )}
+                {isBondSymbol(h.symbol) && (
+                  <div className="text-[10px] text-gray-600 mt-0.5">Bond — no live price</div>
                 )}
                 <div className="grid grid-cols-2 gap-1 mt-0.5 text-[10px] pt-1 border-t border-gray-800/50">
                   <div className="flex justify-between">

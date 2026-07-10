@@ -10,6 +10,11 @@ function sleep(ms) {
   return new Promise(r => setTimeout(r, ms))
 }
 
+function isBond(sym) {
+  if (['RECLTD', 'SGBMR29XII', 'TMCV', 'TMPV', 'BAJFINANCE6', 'LIQUIDCASE'].includes(sym)) return true
+  return /^\d/.test(sym) || /-(?:N\d|GB)$/i.test(sym)
+}
+
 // --- Yahoo Finance ---
 async function yahooPrice(yahooSym, attempt = 0) {
   try {
@@ -68,9 +73,14 @@ async function fetchSymbol(sym) {
     if (price != null) return price
   }
   const found = await yahooSearch(mapped)
-  if (found && !found.includes(mapped)) {
-    const price = await yahooPrice(found)
-    if (price != null) return price
+  if (found) {
+    const foundSuffix = found.match(/\.[A-Z]+$/)?.[0] || ''
+    const foundBase = found.slice(0, -foundSuffix.length)
+    const alreadyTried = SUFFIX_ORDER.map(s => mapped + s.toLowerCase())
+    if (!alreadyTried.includes(found.toLowerCase())) {
+      const price = await yahooPrice(found)
+      if (price != null) return price
+    }
   }
 
   // Fallback to Alpha Vantage
@@ -87,10 +97,11 @@ export default async function handler(req, res) {
   if (!symbols) return res.status(400).json({ error: 'symbols parameter required' })
 
   const list = symbols.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
+  const stocks = list.filter(s => !isBond(s))
   const results = {}
 
-  for (let i = 0; i < list.length; i += BATCH_SIZE) {
-    const batch = list.slice(i, i + BATCH_SIZE)
+  for (let i = 0; i < stocks.length; i += BATCH_SIZE) {
+    const batch = stocks.slice(i, i + BATCH_SIZE)
     const prices = await Promise.allSettled(batch.map(fetchSymbol))
     prices.forEach((p, idx) => {
       if (p.status === 'fulfilled' && p.value != null) results[batch[idx]] = p.value

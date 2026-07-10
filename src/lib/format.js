@@ -8,3 +8,11 @@ export function formatIndian(num) {
   if (!rest) return sign + last3
   return sign + rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + last3
 }
+
+const BOND_PATTERN = /^(\d|[A-Z]+[-]?(?:N\d|GB|FINANCE))/i
+const BOND_EXACT = new Set(['RECLTD', 'SGBMR29XII', 'TMCV', 'TMPV', 'BAJFINANCE6', 'LIQUIDCASE'])
+
+export function isBondSymbol(sym) {
+  if (BOND_EXACT.has(sym.toUpperCase())) return true
+  return /^\d/.test(sym) || /-(?:N\d|GB)$/i.test(sym)
+}
