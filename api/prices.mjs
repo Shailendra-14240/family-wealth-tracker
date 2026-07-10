@@ -35,19 +35,6 @@ async function yahooPrice(yahooSym, attempt = 0) {
   }
 }
 
-async function yahooSearch(query) {
-  try {
-    const resp = await fetch(
-      `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=5&newsCount=0`,
-      { headers: { 'User-Agent': 'Mozilla/5.0' } }
-    )
-    if (!resp.ok) return null
-    const data = await resp.json()
-    const match = data?.quotes?.find(q => (q.exchange === 'NSI' || q.exchange === 'BSE') && q.symbol)
-    return match?.symbol || null
-  } catch { return null }
-}
-
 // --- Alpha Vantage ---
 const AV_KEY = process.env.ALPHA_VANTAGE_KEY
 
@@ -67,20 +54,10 @@ async function avPrice(sym) {
 async function fetchSymbol(sym) {
   const mapped = SYMBOL_MAP[sym] || sym
 
-  // Try Yahoo
+  // Try Yahoo with .NS and .BO
   for (const suffix of SUFFIX_ORDER) {
     const price = await yahooPrice(mapped + suffix)
     if (price != null) return price
-  }
-  const found = await yahooSearch(mapped)
-  if (found) {
-    const foundSuffix = found.match(/\.[A-Z]+$/)?.[0] || ''
-    const foundBase = found.slice(0, -foundSuffix.length)
-    const alreadyTried = SUFFIX_ORDER.map(s => mapped + s.toLowerCase())
-    if (!alreadyTried.includes(found.toLowerCase())) {
-      const price = await yahooPrice(found)
-      if (price != null) return price
-    }
   }
 
   // Fallback to Alpha Vantage
