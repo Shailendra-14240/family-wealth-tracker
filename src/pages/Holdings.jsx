@@ -1,12 +1,15 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
-import { calculateHoldings, calculateSummary } from '../lib/pnlCalc'
+import { calculateHoldings } from '../lib/pnlCalc'
 import { formatIndian } from '../lib/format'
+import { fetchPrices } from '../lib/priceFeed'
 
 export default function Holdings() {
   const [allTxns, setAllTxns] = useState([])
   const [allActions, setAllActions] = useState([])
   const [accounts, setAccounts] = useState([])
+  const [currentPrices, setCurrentPrices] = useState({})
+  const [priceTs, setPriceTs] = useState(null)
   const [loading, setLoading] = useState(true)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -28,14 +31,6 @@ export default function Holdings() {
     })
   }, [])
 
-  const latestPrices = useMemo(() => {
-    const prices = {}
-    for (const t of allTxns) {
-      if (t.type === 'buy' || t.type === 'sell') prices[t.symbol] = Number(t.price)
-    }
-    return prices
-  }, [allTxns])
-
   const filtered = useMemo(() => {
     let txns = allTxns
     if (dateFrom) txns = txns.filter(t => t.date >= dateFrom)
@@ -50,35 +45,60 @@ export default function Holdings() {
 
   const holdings = useMemo(() => calculateHoldings(filtered, allActions), [filtered, allActions])
 
-  const { openPositions, closedPositions } = useMemo(() => {
+  const { openPositions, closedPositions, symbolsToFetch } = useMemo(() => {
     const open = []
     const closed = []
+    const syms = new Set()
     for (const h of holdings) {
       if (h.qty > 0) {
-        const currentPrice = latestPrices[h.symbol] || 0
-        open.push({ ...h, currentPrice, unrealizedPnl: currentPrice > 0 ? Math.round((currentPrice - h.avgCost) * h.qty * 100) / 100 : 0 })
+        open.push(h)
+        syms.add(h.symbol)
       } else if (h.realizedPnl !== 0) {
         closed.push(h)
       }
     }
-    return { openPositions: open, closedPositions: closed }
-  }, [holdings, latestPrices])
+    return { openPositions: open, closedPositions: closed, symbolsToFetch: [...syms] }
+  }, [holdings])
+
+  useEffect(() => {
+    if (!symbolsToFetch.length) return
+    fetchPrices(symbolsToFetch).then(prices => {
+      setCurrentPrices(prices)
+      setPriceTs(Date.now())
+    })
+    const iv = setInterval(() => {
+      fetchPrices(symbolsToFetch).then(prices => {
+        setCurrentPrices(prices)
+        setPriceTs(Date.now())
+      })
+    }, 180000)
+    return () => clearInterval(iv)
+  }, [symbolsToFetch])
+
+  const enrichedOpen = useMemo(() => {
+    return openPositions.map(h => {
+      const price = currentPrices[h.symbol]
+      const unrealizedPnl = price != null
+        ? Math.round((price - h.avgCost) * h.qty * 100) / 100
+        : 0
+      return { ...h, currentPrice: price || 0, unrealizedPnl }
+    })
+  }, [openPositions, currentPrices])
 
   const displayPositions = useMemo(() => {
-    const all = currentOnly ? openPositions : [...openPositions, ...closedPositions]
-    return all
-  }, [currentOnly, openPositions, closedPositions])
+    return currentOnly ? enrichedOpen : [...enrichedOpen, ...closedPositions]
+  }, [currentOnly, enrichedOpen, closedPositions])
 
   const summary = useMemo(() => {
-    const totalInvested = openPositions.reduce((s, h) => s + h.invested, 0)
+    const totalInvested = enrichedOpen.reduce((s, h) => s + h.invested, 0)
     const totalRealizedPnl = holdings.reduce((s, h) => s + h.realizedPnl, 0)
-    const totalUnrealizedPnl = openPositions.reduce((s, h) => s + h.unrealizedPnl, 0)
+    const totalUnrealizedPnl = enrichedOpen.reduce((s, h) => s + h.unrealizedPnl, 0)
     return {
       totalInvested: Math.round(totalInvested * 100) / 100,
       totalRealizedPnl: Math.round(totalRealizedPnl * 100) / 100,
       totalUnrealizedPnl: Math.round(totalUnrealizedPnl * 100) / 100,
     }
-  }, [openPositions, holdings])
+  }, [enrichedOpen, holdings])
 
   if (!supabase) return <p className="text-gray-500 text-center mt-10">Connect Supabase to see holdings</p>
   if (loading) return <p className="text-gray-500 text-center mt-10">Loading...</p>
@@ -130,7 +150,10 @@ export default function Holdings() {
             <p className="text-base sm:text-lg font-bold text-white mt-0.5">₹{formatIndian(summary.totalInvested)}</p>
           </div>
           <div className="text-center">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider">Unrealized P&L</p>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider">
+              Unrealized P&L
+              {priceTs && <span className="text-gray-600 ml-1 font-normal">•</span>}
+            </p>
             <p className={`text-base sm:text-lg font-bold mt-0.5 ${summary.totalUnrealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
               {summary.totalUnrealizedPnl >= 0 ? '+' : ''}₹{formatIndian(summary.totalUnrealizedPnl)}
             </p>
@@ -142,13 +165,16 @@ export default function Holdings() {
             </p>
           </div>
         </div>
+        {priceTs && (
+          <p className="text-[10px] text-gray-600 mt-1.5">Live prices from Yahoo Finance — refreshes every 3 min</p>
+        )}
       </div>
 
-      {openPositions.length > 0 && (
+      {enrichedOpen.length > 0 && (
         <>
           <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Open Positions</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {openPositions.map((h) => (
+            {enrichedOpen.map((h) => (
               <div key={h.symbol} className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3 hover:border-gray-700/50 transition-colors">
                 <div className="flex justify-between items-center mb-1.5">
                   <p className="font-semibold text-sm text-white">{h.symbol}</p>
@@ -158,7 +184,15 @@ export default function Holdings() {
                   <span className="text-gray-400">Avg ₹{formatIndian(h.avgCost)}</span>
                   <span className="text-white font-medium">₹{formatIndian(h.invested)}</span>
                 </div>
-                <div className="grid grid-cols-2 gap-1 mt-0.5 text-[10px]">
+                {h.currentPrice > 0 && (
+                  <div className="flex justify-between items-center text-[10px] mt-0.5">
+                    <span className="text-gray-500">LTP ₹{formatIndian(h.currentPrice)}</span>
+                    <span className={`font-medium ${h.currentPrice >= h.avgCost ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {h.currentPrice >= h.avgCost ? '+' : ''}{(h.currentPrice - h.avgCost).toFixed(1)}
+                    </span>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-1 mt-0.5 text-[10px] pt-1 border-t border-gray-800/50">
                   <div className="flex justify-between">
                     <span className="text-gray-500">Unrealized</span>
                     <span className={`font-medium ${h.unrealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>

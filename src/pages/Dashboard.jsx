@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { calculateHoldings, calculateSummary } from '../lib/pnlCalc'
 import { formatIndian } from '../lib/format'
+import { fetchPrices } from '../lib/priceFeed'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line, CartesianGrid,
@@ -14,6 +15,7 @@ export default function Dashboard() {
   const [allTxns, setAllTxns] = useState([])
   const [allActions, setAllActions] = useState([])
   const [snapshots, setSnapshots] = useState([])
+  const [currentPrices, setCurrentPrices] = useState({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -64,14 +66,30 @@ export default function Dashboard() {
     return Object.entries(bySymbol)
       .sort((a, b) => b[1].invested - a[1].invested)
       .slice(0, 10)
-      .map(([symbol, data], i) => ({
-        symbol,
-        invested: Math.round(data.invested),
-        qty: Math.round(data.qty),
-        avgCost: Math.round(data.qty > 0 ? data.invested / data.qty : 0),
-        fill: COLORS[i % COLORS.length],
-      }))
-  }, [holdings])
+      .map(([symbol, data], i) => {
+        const currentPrice = currentPrices[symbol] || 0
+        const marketValue = currentPrice > 0 ? Math.round(currentPrice * data.qty) : 0
+        return {
+          symbol,
+          invested: Math.round(data.invested),
+          qty: Math.round(data.qty),
+          avgCost: Math.round(data.qty > 0 ? data.invested / data.qty : 0),
+          currentPrice: Math.round(currentPrice),
+          marketValue,
+          unrealizedPnl: marketValue > 0 ? Math.round((currentPrice - data.invested / data.qty) * data.qty) : 0,
+          fill: COLORS[i % COLORS.length],
+        }
+      })
+  }, [holdings, currentPrices])
+
+  const symbolsToFetch = useMemo(() => topHoldings.map(h => h.symbol), [topHoldings])
+
+  useEffect(() => {
+    if (!symbolsToFetch.length) return
+    fetchPrices(symbolsToFetch).then(setCurrentPrices)
+    const iv = setInterval(() => fetchPrices(symbolsToFetch).then(setCurrentPrices), 180000)
+    return () => clearInterval(iv)
+  }, [symbolsToFetch])
 
   const pnlByAccount = useMemo(() => {
     return perAccount.map(a => ({ name: a.name, pnl: Math.round(a.realizedPnl) }))
@@ -153,7 +171,14 @@ export default function Dashboard() {
                       <div className="text-gray-300 font-medium">{d.symbol}</div>
                       <div>Qty: <span className="text-white font-medium">{formatIndian(d.qty)}</span></div>
                       <div>Avg Cost: <span className="text-white font-medium">₹{formatIndian(d.avgCost)}</span></div>
+                      {d.currentPrice > 0 && <div>LTP: <span className="text-white font-medium">₹{formatIndian(d.currentPrice)}</span></div>}
                       <div>Invested: <span className="text-blue-400 font-medium">₹{formatIndian(d.invested)}</span></div>
+                      {d.marketValue > 0 && <div>Market Value: <span className="text-purple-400 font-medium">₹{formatIndian(d.marketValue)}</span></div>}
+                      {d.unrealizedPnl !== 0 && (
+                        <div className={`pt-1 border-t border-gray-700 font-medium ${d.unrealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          Unrealized P&L: {d.unrealizedPnl >= 0 ? '+' : ''}₹{formatIndian(d.unrealizedPnl)}
+                        </div>
+                      )}
                     </div>
                   )
                 }} />
