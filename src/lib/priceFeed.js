@@ -20,8 +20,7 @@ function saveCache(data) {
 }
 
 export async function fetchPrices(symbols) {
-  const unique = [...new Set(symbols.map(s => s.trim().toUpperCase()).filter(Boolean))]
-  const stocks = unique.filter(s => !isBondSymbol(s))
+  const stocks = [...new Set(symbols.map(s => s.trim().toUpperCase()))].filter(s => s && !isBondSymbol(s))
   const cached = loadCache()
 
   try {
