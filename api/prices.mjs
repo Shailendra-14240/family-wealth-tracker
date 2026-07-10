@@ -3,7 +3,8 @@ const SYMBOL_MAP = {
 }
 
 const SUFFIX_ORDER = ['.NS', '.BO']
-const DELAY_MS = 350
+const BATCH_SIZE = 3
+const BATCH_DELAY_MS = 200
 
 function sleep(ms) {
   return new Promise(r => setTimeout(r, ms))
@@ -37,6 +38,20 @@ async function searchYahooSymbol(query) {
   }
 }
 
+async function fetchSymbol(sym) {
+  const mapped = SYMBOL_MAP[sym] || sym
+  for (const suffix of SUFFIX_ORDER) {
+    const price = await fetchYahooPrice(mapped + suffix)
+    if (price != null) return price
+  }
+  const found = await searchYahooSymbol(mapped)
+  if (found && found !== mapped) {
+    await sleep(BATCH_DELAY_MS)
+    return fetchYahooPrice(found)
+  }
+  return null
+}
+
 export default async function handler(req, res) {
   const { symbols } = req.query
   if (!symbols) return res.status(400).json({ error: 'symbols parameter required' })
@@ -44,28 +59,15 @@ export default async function handler(req, res) {
   const list = symbols.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
   const results = {}
 
-  for (const sym of list) {
-    const mapped = SYMBOL_MAP[sym] || sym
-    let price = null
-
-    // Try primary suffix
-    for (const suffix of SUFFIX_ORDER) {
-      price = await fetchYahooPrice(mapped + suffix)
-      if (price != null) break
-      await sleep(DELAY_MS)
-    }
-
-    // Fallback: search Yahoo for correct symbol
-    if (price == null) {
-      const found = await searchYahooSymbol(mapped)
-      if (found && found !== mapped) {
-        await sleep(DELAY_MS)
-        price = await fetchYahooPrice(found)
+  for (let i = 0; i < list.length; i += BATCH_SIZE) {
+    const batch = list.slice(i, i + BATCH_SIZE)
+    const prices = await Promise.allSettled(batch.map(fetchSymbol))
+    prices.forEach((p, idx) => {
+      if (p.status === 'fulfilled' && p.value != null) {
+        results[batch[idx]] = p.value
       }
-    }
-
-    if (price != null) results[sym] = price
-    await sleep(DELAY_MS)
+    })
+    if (i + BATCH_SIZE < list.length) await sleep(BATCH_DELAY_MS)
   }
 
   res.setHeader('Cache-Control', 's-maxage=180, stale-while-revalidate=60')
