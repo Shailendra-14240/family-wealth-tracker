@@ -3,8 +3,23 @@ const SYMBOL_MAP = {
 }
 
 const SUFFIX_ORDER = ['.NS', '.BO']
+const DELAY_MS = 350
 
-async function searchSymbol(query) {
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms))
+}
+
+async function fetchYahooPrice(yahooSym) {
+  const resp = await fetch(
+    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSym)}?range=1d&interval=1d`,
+    { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } }
+  )
+  if (!resp.ok) return null
+  const data = await resp.json()
+  return data?.chart?.result?.[0]?.meta?.regularMarketPrice ?? null
+}
+
+async function searchYahooSymbol(query) {
   try {
     const resp = await fetch(
       `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=5&newsCount=0`,
@@ -29,42 +44,29 @@ export default async function handler(req, res) {
   const list = symbols.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
   const results = {}
 
-  await Promise.allSettled(list.map(async (sym) => {
+  for (const sym of list) {
     const mapped = SYMBOL_MAP[sym] || sym
+    let price = null
+
+    // Try primary suffix
     for (const suffix of SUFFIX_ORDER) {
-      try {
-        const yahooSym = mapped + suffix
-        const resp = await fetch(
-          `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSym)}?range=1d&interval=1d`,
-          { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } }
-        )
-        if (!resp.ok) continue
-        const data = await resp.json()
-        const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice
-        if (price != null) {
-          results[sym] = price
-          return
-        }
-      } catch {}
+      price = await fetchYahooPrice(mapped + suffix)
+      if (price != null) break
+      await sleep(DELAY_MS)
     }
-    // Fallback: search Yahoo for the correct symbol
-    if (!results[sym]) {
-      const found = await searchSymbol(mapped)
+
+    // Fallback: search Yahoo for correct symbol
+    if (price == null) {
+      const found = await searchYahooSymbol(mapped)
       if (found && found !== mapped) {
-        try {
-          const resp = await fetch(
-            `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(found)}?range=1d&interval=1d`,
-            { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } }
-          )
-          if (resp.ok) {
-            const data = await resp.json()
-            const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice
-            if (price != null) results[sym] = price
-          }
-        } catch {}
+        await sleep(DELAY_MS)
+        price = await fetchYahooPrice(found)
       }
     }
-  }))
+
+    if (price != null) results[sym] = price
+    await sleep(DELAY_MS)
+  }
 
   res.setHeader('Cache-Control', 's-maxage=180, stale-while-revalidate=60')
   res.setHeader('Access-Control-Allow-Origin', '*')
