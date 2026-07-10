@@ -3,21 +3,38 @@ const SYMBOL_MAP = {
 }
 
 const SUFFIX_ORDER = ['.NS', '.BO']
-const BATCH_SIZE = 3
-const BATCH_DELAY_MS = 200
+const BATCH_SIZE = 2
+const BATCH_DELAY_MS = 300
+const MAX_RETRIES = 2
+const RETRY_DELAYS = [200, 500]
 
 function sleep(ms) {
   return new Promise(r => setTimeout(r, ms))
 }
 
-async function fetchYahooPrice(yahooSym) {
-  const resp = await fetch(
-    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSym)}?range=1d&interval=1d`,
-    { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } }
-  )
-  if (!resp.ok) return null
-  const data = await resp.json()
-  return data?.chart?.result?.[0]?.meta?.regularMarketPrice ?? null
+async function fetchYahooPrice(yahooSym, attempt = 0) {
+  try {
+    const resp = await fetch(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSym)}?range=1d&interval=1d`,
+      { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } }
+    )
+    if (resp.status === 429 || resp.status === 404) return null
+    if (!resp.ok) {
+      if (attempt < MAX_RETRIES) {
+        await sleep(RETRY_DELAYS[attempt])
+        return fetchYahooPrice(yahooSym, attempt + 1)
+      }
+      return null
+    }
+    const data = await resp.json()
+    return data?.chart?.result?.[0]?.meta?.regularMarketPrice ?? null
+  } catch {
+    if (attempt < MAX_RETRIES) {
+      await sleep(RETRY_DELAYS[attempt])
+      return fetchYahooPrice(yahooSym, attempt + 1)
+    }
+    return null
+  }
 }
 
 async function searchYahooSymbol(query) {
