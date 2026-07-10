@@ -14,17 +14,13 @@ export async function fetchPrices(symbols) {
     return cached
   }
 
-  const uncached = unique.filter(sym => cache[sym] === undefined)
-  if (uncached.length === 0) {
-    for (const sym of unique) cached[sym] = cache[sym]
-    return cached
-  }
-
   try {
-    const res = await fetch(`/api/prices?symbols=${uncached.join(',')}`)
+    const res = await fetch(`/api/prices?symbols=${unique.join(',')}`)
     if (res.ok) {
       const data = await res.json()
-      Object.assign(cache, data)
+      for (const sym of unique) {
+        cache[sym] = data[sym] !== undefined ? data[sym] : null
+      }
       lastFetch = now
     }
   } catch (err) {

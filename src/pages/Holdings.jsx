@@ -78,10 +78,11 @@ export default function Holdings() {
   const enrichedOpen = useMemo(() => {
     return openPositions.map(h => {
       const price = currentPrices[h.symbol]
-      const unrealizedPnl = price != null
+      const hasPrice = price != null && price > 0
+      const unrealizedPnl = hasPrice
         ? Math.round((price - h.avgCost) * h.qty * 100) / 100
-        : 0
-      return { ...h, currentPrice: price || 0, unrealizedPnl }
+        : null
+      return { ...h, currentPrice: hasPrice ? price : null, unrealizedPnl }
     })
   }, [openPositions, currentPrices])
 
@@ -92,11 +93,13 @@ export default function Holdings() {
   const summary = useMemo(() => {
     const totalInvested = enrichedOpen.reduce((s, h) => s + h.invested, 0)
     const totalRealizedPnl = holdings.reduce((s, h) => s + h.realizedPnl, 0)
-    const totalUnrealizedPnl = enrichedOpen.reduce((s, h) => s + h.unrealizedPnl, 0)
+    const totalUnrealizedPnl = enrichedOpen.reduce((s, h) => s + (h.unrealizedPnl ?? 0), 0)
+    const missingPrices = enrichedOpen.filter(h => h.currentPrice == null).length
     return {
       totalInvested: Math.round(totalInvested * 100) / 100,
       totalRealizedPnl: Math.round(totalRealizedPnl * 100) / 100,
       totalUnrealizedPnl: Math.round(totalUnrealizedPnl * 100) / 100,
+      missingPrices,
     }
   }, [enrichedOpen, holdings])
 
@@ -166,7 +169,10 @@ export default function Holdings() {
           </div>
         </div>
         {priceTs && (
-          <p className="text-[10px] text-gray-600 mt-1.5">Live prices from Yahoo Finance — refreshes every 3 min</p>
+          <p className="text-[10px] text-gray-600 mt-1.5">
+            Live prices from Yahoo Finance — refreshes every 3 min
+            {summary.missingPrices > 0 && <span className="text-yellow-600 ml-2">{summary.missingPrices} symbol(s) not found</span>}
+          </p>
         )}
       </div>
 
@@ -184,7 +190,7 @@ export default function Holdings() {
                   <span className="text-gray-400">Avg ₹{formatIndian(h.avgCost)}</span>
                   <span className="text-white font-medium">₹{formatIndian(h.invested)}</span>
                 </div>
-                {h.currentPrice > 0 && (
+                {h.currentPrice != null && (
                   <div className="flex justify-between items-center text-[10px] mt-0.5">
                     <span className="text-gray-500">LTP ₹{formatIndian(h.currentPrice)}</span>
                     <span className={`font-medium ${h.currentPrice >= h.avgCost ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -192,11 +198,14 @@ export default function Holdings() {
                     </span>
                   </div>
                 )}
+                {h.currentPrice == null && priceTs && (
+                  <div className="text-[10px] text-gray-600 mt-0.5">LTP N/A</div>
+                )}
                 <div className="grid grid-cols-2 gap-1 mt-0.5 text-[10px] pt-1 border-t border-gray-800/50">
                   <div className="flex justify-between">
                     <span className="text-gray-500">Unrealized</span>
-                    <span className={`font-medium ${h.unrealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {h.unrealizedPnl >= 0 ? '+' : ''}₹{formatIndian(h.unrealizedPnl)}
+                    <span className={`font-medium ${h.unrealizedPnl != null && h.unrealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {h.unrealizedPnl != null ? `${h.unrealizedPnl >= 0 ? '+' : ''}₹${formatIndian(h.unrealizedPnl)}` : 'N/A'}
                     </span>
                   </div>
                   <div className="flex justify-between">
