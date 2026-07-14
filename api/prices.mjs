@@ -1,4 +1,4 @@
-const MAP = { 'NIFTBEES': 'NIFTYBEES' }
+const MAP = { 'NIFTBEES': 'NIFTYBEES', 'MOM': 'MOM100' }
 const AV_KEY = process.env.ALPHA_VANTAGE_KEY
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
