@@ -10,7 +10,7 @@ export function formatIndian(num) {
 }
 
 const BOND_PATTERN = /^(\d|[A-Z]+[-]?(?:N\d|GB|FINANCE))/i
-const BOND_EXACT = new Set(['RECLTD', 'SGBMR29XII', 'BAJFINANCE6', 'LIQUIDCASE', 'L&TFINANCE'])
+const BOND_EXACT = new Set(['RECLTD', 'SGBMR29XII', 'BAJFINANCE6', 'L&TFINANCE'])
 
 export function isBondSymbol(sym) {
   if (BOND_EXACT.has(sym.toUpperCase())) return true
