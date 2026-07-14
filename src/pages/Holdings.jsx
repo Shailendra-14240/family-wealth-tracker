@@ -16,6 +16,7 @@ export default function Holdings() {
   const [symbolFilter, setSymbolFilter] = useState('')
   const [accountFilter, setAccountFilter] = useState('')
   const [currentOnly, setCurrentOnly] = useState(true)
+  const [sortBy, setSortBy] = useState('invested-desc')
 
   useEffect(() => {
     if (!supabase) return
@@ -85,6 +86,39 @@ export default function Holdings() {
       return { ...h, currentPrice: hasPrice ? price : null, unrealizedPnl }
     })
   }, [openPositions, currentPrices])
+
+  const SORT_OPTIONS = [
+    { value: 'invested-desc', label: 'Invested ↓' },
+    { value: 'invested-asc', label: 'Invested ↑' },
+    { value: 'pnl-desc', label: 'Unrealized P&L ↓' },
+    { value: 'pnl-asc', label: 'Unrealized P&L ↑' },
+    { value: 'realized-desc', label: 'Realized P&L ↓' },
+    { value: 'realized-asc', label: 'Realized P&L ↑' },
+    { value: 'ltp-desc', label: 'LTP ↓' },
+    { value: 'ltp-asc', label: 'LTP ↑' },
+    { value: 'diff-desc', label: 'LTP−Avg ↓' },
+    { value: 'diff-asc', label: 'LTP−Avg ↑' },
+    { value: 'symbol-asc', label: 'Symbol A→Z' },
+    { value: 'symbol-desc', label: 'Symbol Z→A' },
+  ]
+
+  const sortedPositions = useMemo(() => {
+    const sortFn = (a, b) => {
+      const [key, dir] = sortBy.split('-')
+      let va, vb
+      switch (key) {
+        case 'invested': va = a.invested; vb = b.invested; break
+        case 'pnl': va = a.unrealizedPnl ?? -Infinity; vb = b.unrealizedPnl ?? -Infinity; break
+        case 'realized': va = a.realizedPnl; vb = b.realizedPnl; break
+        case 'ltp': va = a.currentPrice ?? -Infinity; vb = b.currentPrice ?? -Infinity; break
+        case 'diff': va = (a.currentPrice ?? 0) - a.avgCost; vb = (b.currentPrice ?? 0) - b.avgCost; break
+        case 'symbol': return dir === 'asc' ? a.symbol.localeCompare(b.symbol) : b.symbol.localeCompare(a.symbol)
+        default: return 0
+      }
+      return dir === 'asc' ? va - vb : vb - va
+    }
+    return [...enrichedOpen].sort(sortFn)
+  }, [enrichedOpen, sortBy])
 
   const displayPositions = useMemo(() => {
     return currentOnly ? enrichedOpen : [...enrichedOpen, ...closedPositions]
@@ -178,9 +212,15 @@ export default function Holdings() {
 
       {enrichedOpen.length > 0 && (
         <>
-          <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Open Positions</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Open Positions</h2>
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+              className="bg-gray-800/80 border border-gray-700/50 text-white rounded-lg px-2 py-1 text-[10px]">
+              {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {enrichedOpen.map((h) => (
+            {sortedPositions.map((h) => (
               <div key={h.symbol} className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3 hover:border-gray-700/50 transition-colors">
                 <div className="flex justify-between items-center mb-1.5">
                   <p className="font-semibold text-sm text-white">{h.symbol}</p>

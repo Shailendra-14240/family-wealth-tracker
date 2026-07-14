@@ -14,6 +14,7 @@ export default function LotWisePnl() {
   const [filterDateTo, setFilterDateTo] = useState('')
   const [showClosedOnly, setShowClosedOnly] = useState(false)
   const [doConsolidate, setDoConsolidate] = useState(true)
+  const [sortBy, setSortBy] = useState('symbol-asc')
 
   useEffect(() => {
     if (!supabase) return
@@ -42,11 +43,24 @@ export default function LotWisePnl() {
 
   const symbols = useMemo(() => pnlData.map(d => d.symbol).sort(), [pnlData])
 
+  const LOT_SORT_OPTIONS = [
+    { value: 'symbol-asc', label: 'Symbol A→Z' },
+    { value: 'symbol-desc', label: 'Symbol Z→A' },
+    { value: 'pnl-desc', label: 'P&L ↓' },
+    { value: 'pnl-asc', label: 'P&L ↑' },
+    { value: 'buy-desc', label: 'Buy Value ↓' },
+    { value: 'buy-asc', label: 'Buy Value ↑' },
+    { value: 'sell-desc', label: 'Sell Value ↓' },
+    { value: 'sell-asc', label: 'Sell Value ↑' },
+    { value: 'qty-desc', label: 'Remaining ↓' },
+    { value: 'qty-asc', label: 'Remaining ↑' },
+  ]
+
   const filtered = useMemo(() => {
-    let data = pnlData.slice().sort((a, b) => a.symbol.localeCompare(b.symbol))
+    let data = pnlData.slice()
     if (filterSymbol) data = data.filter(d => d.symbol === filterSymbol)
     if (showClosedOnly) data = data.filter(d => d.lots.every(l => l.remainingQty === 0))
-    return data.map(group => ({
+    data = data.map(group => ({
       ...group,
       lots: group.lots.filter(l => {
         if (filterDateFrom && l.buyDate < filterDateFrom) return false
@@ -54,7 +68,22 @@ export default function LotWisePnl() {
         return true
       }),
     })).filter(g => g.lots.length > 0)
-  }, [pnlData, filterSymbol, filterDateFrom, filterDateTo, showClosedOnly])
+
+    const [key, dir] = sortBy.split('-')
+    data.sort((a, b) => {
+      let va, vb
+      switch (key) {
+        case 'symbol': return dir === 'asc' ? a.symbol.localeCompare(b.symbol) : b.symbol.localeCompare(a.symbol)
+        case 'pnl': va = a.lots.reduce((s, l) => s + l.sellTotalPnl, 0); vb = b.lots.reduce((s, l) => s + l.sellTotalPnl, 0); break
+        case 'buy': va = a.lots.reduce((s, l) => s + l.buyQty * l.buyPrice, 0); vb = b.lots.reduce((s, l) => s + l.buyQty * l.buyPrice, 0); break
+        case 'sell': va = a.lots.reduce((s, l) => s + l.sells.reduce((s2, sl) => s2 + sl.qty * sl.price, 0), 0); vb = b.lots.reduce((s, l) => s + l.sells.reduce((s2, sl) => s2 + sl.qty * sl.price, 0), 0); break
+        case 'qty': va = a.lots.reduce((s, l) => s + l.remainingQty, 0); vb = b.lots.reduce((s, l) => s + l.remainingQty, 0); break
+        default: return 0
+      }
+      return dir === 'asc' ? va - vb : vb - va
+    })
+    return data
+  }, [pnlData, filterSymbol, filterDateFrom, filterDateTo, showClosedOnly, sortBy])
 
   if (!supabase) return <p className="text-gray-500 text-center mt-10">Connect Supabase</p>
   if (loading) return <p className="text-gray-500 text-center mt-10">Loading...</p>
@@ -82,6 +111,9 @@ export default function LotWisePnl() {
           <input type="checkbox" className="accent-blue-500 w-4 h-4 rounded" checked={doConsolidate} onChange={e => setDoConsolidate(e.target.checked)} />
           Group by date
         </label>
+        <select className="bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm" value={sortBy} onChange={e => setSortBy(e.target.value)}>
+          {LOT_SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
       </div>
 
       <div className="space-y-4">
