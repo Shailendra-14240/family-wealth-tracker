@@ -8,6 +8,7 @@ const navItems = [
   { to: '/transactions', label: 'Txns', icon: '📋' },
   { to: '/accounts', label: 'Accounts', icon: '🏦' },
   { to: '/corporate-actions', label: 'Actions', icon: '🔄' },
+  { to: '/fo-trades', label: 'F&O', icon: '⚡' },
 ]
 
 export default function Layout({ children }) {

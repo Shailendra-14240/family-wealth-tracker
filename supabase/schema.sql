@@ -37,6 +37,28 @@ create table transactions (
 create index idx_transactions_order_id on transactions(order_id) where order_id is not null;
 create index idx_transactions_source_file on transactions(source_file);
 
+create table fo_transactions (
+  id                   bigint generated always as identity primary key,
+  account_id           bigint references accounts(id) on delete cascade,
+  date                 date not null,
+  type                 text not null check (type in ('buy','sell')),
+  symbol               text not null,
+  isin                 text,
+  qty                  numeric(12,2) not null,
+  price                numeric(12,2) not null,
+  trade_id             text,
+  order_id             text,
+  order_execution_time timestamptz,
+  expiry_date          date not null,
+  exchange             text default 'NSE',
+  source_file          text,
+  notes                text,
+  created_at           timestamptz default now()
+);
+
+create index idx_fo_transactions_order_id on fo_transactions(order_id) where order_id is not null;
+create index idx_fo_transactions_source_file on fo_transactions(source_file);
+
 create table corporate_actions (
   id          bigint generated always as identity primary key,
   date        date not null,
