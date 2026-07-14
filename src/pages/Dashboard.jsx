@@ -46,13 +46,21 @@ export default function Dashboard() {
     return accounts
       .map(acct => {
         const txns = allTxns.filter(t => t.account_id === acct.id)
-        if (!txns.length) return { ...acct, invested: 0, realizedPnl: 0 }
+        if (!txns.length) return { ...acct, invested: 0, realizedPnl: 0, unrealizedPnl: 0 }
         const h = calculateHoldings(txns, allActions)
         const s = calculateSummary(h)
-        return { ...acct, invested: s.totalInvested, realizedPnl: s.totalRealizedPnl }
+        let unrealizedPnl = 0
+        for (const pos of h) {
+          if (pos.qty <= 0) continue
+          const price = currentPrices[pos.symbol]
+          if (price != null && price > 0) {
+            unrealizedPnl += (price - pos.avgCost) * pos.qty
+          }
+        }
+        return { ...acct, invested: s.totalInvested, realizedPnl: s.totalRealizedPnl, unrealizedPnl: Math.round(unrealizedPnl * 100) / 100 }
       })
-      .filter(a => a.invested !== 0 || a.realizedPnl !== 0 || Number(a.balance) !== 0)
-  }, [allTxns, allActions, accounts])
+      .filter(a => a.invested !== 0 || a.realizedPnl !== 0 || a.unrealizedPnl !== 0 || Number(a.balance) !== 0)
+  }, [allTxns, allActions, accounts, currentPrices])
 
   const topHoldings = useMemo(() => {
     const bySymbol = {}
@@ -82,7 +90,27 @@ export default function Dashboard() {
       })
   }, [holdings, currentPrices])
 
-  const symbolsToFetch = useMemo(() => topHoldings.map(h => h.symbol), [topHoldings])
+  const allOpenSymbols = useMemo(() => {
+    const syms = new Set()
+    for (const h of holdings) {
+      if (h.qty > 0) syms.add(h.symbol)
+    }
+    return [...syms]
+  }, [holdings])
+
+  const totalUnrealizedPnl = useMemo(() => {
+    let total = 0
+    for (const h of holdings) {
+      if (h.qty <= 0) continue
+      const price = currentPrices[h.symbol]
+      if (price != null && price > 0) {
+        total += (price - h.avgCost) * h.qty
+      }
+    }
+    return Math.round(total * 100) / 100
+  }, [holdings, currentPrices])
+
+  const symbolsToFetch = allOpenSymbols
 
   useEffect(() => {
     if (!symbolsToFetch.length) return
@@ -92,7 +120,11 @@ export default function Dashboard() {
   }, [symbolsToFetch])
 
   const pnlByAccount = useMemo(() => {
-    return perAccount.map(a => ({ name: a.name, pnl: Math.round(a.realizedPnl) }))
+    return perAccount.map(a => ({
+      name: a.name,
+      realized: Math.round(a.realizedPnl),
+      unrealized: Math.round(a.unrealizedPnl),
+    }))
   }, [perAccount])
 
   const portfolioComposition = useMemo(() => {
@@ -101,6 +133,13 @@ export default function Dashboard() {
       { name: 'Invested', value: Math.round(summary.totalInvested), color: '#3b82f6' },
       { name: 'Cash', value: Math.round(assets), color: '#22c55e' },
     ]
+    if (totalUnrealizedPnl !== 0) {
+      items.push({
+        name: 'Unrealized P&L',
+        value: Math.abs(Math.round(totalUnrealizedPnl)),
+        color: totalUnrealizedPnl > 0 ? '#06b6d4' : '#ef4444',
+      })
+    }
     if (summary.totalRealizedPnl !== 0) {
       items.push({
         name: 'Realized P&L',
@@ -109,7 +148,7 @@ export default function Dashboard() {
       })
     }
     return items.filter(d => d.value > 0)
-  }, [summary, accounts])
+  }, [summary, accounts, totalUnrealizedPnl])
 
   if (!supabase) return <p className="text-gray-500 text-center mt-10">Connect Supabase to see live data</p>
   if (loading) return <p className="text-gray-500 text-center mt-10">Loading...</p>
@@ -142,10 +181,11 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { label: 'Accounts', value: accounts.length, color: 'text-white' },
           { label: 'Invested', value: `₹${formatIndian(summary.totalInvested)}`, color: 'text-blue-400' },
+          { label: 'Unrealized P&L', value: `${totalUnrealizedPnl >= 0 ? '+' : ''}₹${formatIndian(totalUnrealizedPnl)}`, color: totalUnrealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400' },
           { label: 'Realized P&L', value: `${summary.totalRealizedPnl >= 0 ? '+' : ''}₹${formatIndian(summary.totalRealizedPnl)}`, color: summary.totalRealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400' },
         ].map(stat => (
           <div key={stat.label} className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3.5 md:p-4 text-center backdrop-blur-sm">
@@ -200,10 +240,9 @@ export default function Dashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
                 <XAxis dataKey="name" tick={{ fill: '#d1d5db', fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={tooltipContent} formatter={(v) => [`₹${formatIndian(v)}`, 'P&L']} />
-                <Bar dataKey="pnl" radius={[4, 4, 0, 0]}>
-                  {pnlByAccount.map((entry, i) => <Cell key={i} fill={entry.pnl >= 0 ? '#22c55e' : '#ef4444'} />)}
-                </Bar>
+                <Tooltip contentStyle={tooltipContent} formatter={(v, name) => [`₹${formatIndian(v)}`, name === 'realized' ? 'Realized' : 'Unrealized']} />
+                <Bar dataKey="unrealized" stackId="pnl" fill="#06b6d4" radius={[0, 0, 0, 0]} name="unrealized" />
+                <Bar dataKey="realized" stackId="pnl" fill="#22c55e" radius={[4, 4, 0, 0]} name="realized" />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -275,9 +314,14 @@ export default function Dashboard() {
                   ₹{formatIndian(acct.balance)}
                 </p>
               </div>
-              {(acct.invested !== 0 || acct.realizedPnl !== 0) && (
+              {(acct.invested !== 0 || acct.realizedPnl !== 0 || acct.unrealizedPnl !== 0) && (
                 <div className="flex gap-4 mt-2 pt-2 border-t border-gray-800/50 text-xs">
                   <span className="text-gray-500">Invested: <span className="text-blue-400 font-medium">₹{formatIndian(acct.invested)}</span></span>
+                  {acct.unrealizedPnl !== 0 && (
+                    <span className="text-gray-500">Unrealized: <span className={`font-medium ${acct.unrealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {acct.unrealizedPnl >= 0 ? '+' : ''}₹{formatIndian(acct.unrealizedPnl)}
+                    </span></span>
+                  )}
                   <span className="text-gray-500">P&L: <span className={`font-medium ${acct.realizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                     {acct.realizedPnl >= 0 ? '+' : ''}₹{formatIndian(acct.realizedPnl)}
                   </span></span>
