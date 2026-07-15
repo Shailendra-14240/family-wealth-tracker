@@ -191,11 +191,14 @@ export default function FoTrades() {
     setPdfInserting(true)
     setPdfStatus({ type: 'info', msg: 'Checking duplicates...' })
     try {
-      let rows = pdfParsed.map(r => ({
-        ...r,
-        account_id: pdfAccountId || null,
-        source_file: 'contract_note.pdf',
-      }))
+      let rows = pdfParsed.map(r => {
+        const { is_synthetic, ...rest } = r
+        return {
+          ...rest,
+          account_id: pdfAccountId || null,
+          source_file: 'contract_note.pdf',
+        }
+      })
       const acct = pdfAccountId || null
 
       // Dedup by trade_id (synthetic IDs are deterministic)
