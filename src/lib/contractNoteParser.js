@@ -2,39 +2,18 @@ import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 GlobalWorkerOptions.workerSrc = workerUrl
 
-function parsePdfDate(val) {
-  const parts = val.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/)
-  if (!parts) return null
-  let a = parseInt(parts[1], 10), b = parseInt(parts[2], 10), y = parts[3]
+function parsePdfDate(s) {
+  const m = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/)
+  if (!m) return null
+  let a = parseInt(m[1], 10), b = parseInt(m[2], 10), y = m[3]
   if (a > 12) return `${y}-${String(b).padStart(2, '0')}-${String(a).padStart(2, '0')}`
   if (b > 12) return `${y}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}`
   return `${y}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}`
 }
 
-function extractLines(textContent) {
-  const items = textContent.items
-  const threshold = 4
-  const sorted = [...items].sort((a, b) => {
-    const yd = b.transform[5] - a.transform[5]
-    if (Math.abs(yd) > threshold) return yd
-    return a.transform[4] - b.transform[4]
-  })
-  const lines = []
-  let cur = []
-  let curY = null
-  for (const item of sorted) {
-    const y = Math.round(item.transform[5])
-    if (curY === null) curY = y
-    if (Math.abs(y - curY) > threshold) {
-      lines.push(cur.map(i => i.str).join(''))
-      cur = [item]
-      curY = y
-    } else {
-      cur.push(item)
-    }
-  }
-  if (cur.length) lines.push(cur.map(i => i.str).join(''))
-  return lines
+function nextLine(text, from) {
+  const nl = text.indexOf('\n', from)
+  return nl !== -1 ? nl + 1 : text.length
 }
 
 export async function parseContractNotePdf(arrayBuffer) {
@@ -44,82 +23,68 @@ export async function parseContractNotePdf(arrayBuffer) {
 
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i)
-    const textContent = await page.getTextContent()
-    const lines = extractLines(textContent)
+    const tc = await page.getTextContent()
 
-    for (let li = 0; li < lines.length; li++) {
-      const line = lines[li]
+    // Sort items top→bottom, left→right
+    const items = [...tc.items].sort((a, b) => {
+      const yd = b.transform[5] - a.transform[5]
+      if (Math.abs(yd) > 4) return yd
+      return a.transform[4] - b.transform[4]
+    })
 
-      // Track trade date from header pages
-      const td = line.match(/Trade Date:\s*(\d{2}\/\d{2}\/\d{4})/)
-      if (td) currentTradeDate = parsePdfDate(td[1])
+    // Build continuous page text (always space between same-line items)
+    let lastY = null
+    let text = ''
+    for (const item of items) {
+      const y = Math.round(item.transform[5])
+      if (lastY !== null && Math.abs(y - lastY) > 4) { text += '\n' }
+      else if (lastY !== null) { text += ' ' }
+      text += item.str
+      lastY = y
+    }
 
-      // Look for derivatives data rows in Annexure A
-      // Pattern: space-separated with OrderNo at start and B/S near the end
-      // Synthetic entries have OrderNo = 111111, price = 0.00
-      if (line.startsWith('111111') && /\d{2}:\d{2}:\d{2}/.test(line)) {
-        const parts = line.trim().split(/\s+/)
-        if (parts.length < 12) continue
+    // Track trade date
+    const td = text.match(/Trade Date:\s*(\d{2}\/\d{2}\/\d{4})/)
+    if (td) currentTradeDate = parsePdfDate(td[1])
 
-        // parts[0]=orderNo, [1]=orderTime, [2]=tradeNo, [3]=tradeTime
-        // The contract description can include spaces (like "30 March 2026" on next line)
-        // Find B/S position - it's either part[7] (with expiry day) or part[6] (without)
-        let bsIdx = -1
-        let symbol = ''
-        for (let j = 4; j < parts.length; j++) {
-          if (parts[j] === 'B' || parts[j] === 'S') {
-            // Check if previous parts contain the symbol
-            const descParts = parts.slice(4, j)
-            symbol = descParts[0].replace(/\/.*$/, '').trim()
-            if (!symbol) symbol = descParts[0]
-            // Also check for -AF suffix (skip those)
-            if (symbol.includes('-AF') || symbol.includes('-EQ')) { bsIdx = -2; break }
-            bsIdx = j
-            break
-          }
-        }
-        if (bsIdx < 0) continue
+    // Find 111111 synthetic expiry entries
+    // Only match at line start to avoid double-matching the TradeNo 111111
+    const lineRegex = /^(?:111111\s+\d{2}:\d{2}:\d{2}\s+111111\s+\d{2}:\d{2}:\d{2}\s+)(.+)$/gm
+    let m
+    while ((m = lineRegex.exec(text)) !== null) {
+      const fullLine = m[0]
+      const rest = m[1]
 
-        const bs = parts[bsIdx]
-        const qty = parseInt(parts[bsIdx + 2], 10)
-        const netRate = parseFloat(parts[bsIdx + 4])
-        const netTotalRaw = parts[bsIdx + 5]
+      // Find B/S indicator in the rest
+      const bsMatch = rest.match(/\s([BS])\s+([A-Z]{2,5})\s+(\d+)\s+([\d.]+)\s+([\d.]+)\s+/)
+      if (!bsMatch) continue
 
-        if (!symbol || !qty || qty <= 0) continue
+      // Symbol is everything before B/S, first token
+      const beforeBS = rest.slice(0, bsMatch.index).trim()
+      const symbol = beforeBS.split(/[\s\/]+/)[0].toUpperCase()
 
-        // Determine expiry date:
-        // Check next line for month/year pattern ("March 2026")
-        let expiryDate = currentTradeDate
-        if (li + 1 < lines.length) {
-          const nextLine = lines[li + 1].trim()
-          const monthMatch = nextLine.match(/(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})/i)
-          if (monthMatch) {
-            const monthMap = { january: '01', february: '02', march: '03', april: '04', may: '05', june: '06', july: '07', august: '08', september: '09', october: '10', november: '11', december: '12' }
-            const mon = monthMap[monthMatch[1].toLowerCase()]
-            const yr = monthMatch[2]
-            // Extract expiry day from the desc
-            const dayMatch = symbol.match(/(\d{2})(CE|PE|FUT)$/i) || symbol.match(/\/\s*(\d+)/)
-            if (!dayMatch) continue
-            const day = dayMatch[1].length === 2 ? dayMatch[1] : dayMatch[1].padStart(2, '0')
-            expiryDate = `${yr}-${mon}-${day}`
-          }
-        }
+      if (!symbol || symbol.includes('-AF') || symbol.includes('-EQ') || symbol.includes('-A')) continue
 
-        syntheticTxns.push({
-          symbol: symbol.toUpperCase(),
-          type: bs === 'B' ? 'buy' : 'sell',
-          qty,
-          price: netRate || 0,
-          date: currentTradeDate,
-          expiry_date: expiryDate || currentTradeDate,
-          trade_id: `SYNTH-${symbol}-${currentTradeDate}`,
-          order_id: null,
-          order_execution_time: null,
-          exchange: 'NSE',
-          isin: null,
-          is_synthetic: true,
-        })
-      }
+      const bs = bsMatch[1]
+      const qty = parseInt(bsMatch[3], 10)
+      const netRate = parseFloat(bsMatch[5])
+
+      if (!qty || qty <= 0) continue
+
+      syntheticTxns.push({
+        symbol: symbol.toUpperCase(),
+        type: bs === 'B' ? 'buy' : 'sell',
+        qty,
+        price: netRate || 0,
+        date: currentTradeDate,
+        expiry_date: currentTradeDate,
+        trade_id: `SYNTH-${symbol}-${currentTradeDate || 'unknown'}`,
+        order_id: null,
+        order_execution_time: null,
+        exchange: 'NSE',
+        isin: null,
+        is_synthetic: true,
+      })
     }
   }
 
