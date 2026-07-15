@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { parseFoCsv } from '../lib/foCsvParser'
+import { parseContractNotePdf } from '../lib/contractNoteParser'
 import { calculateFoPnl, calculateFoSummary, parseFoOptionSymbol } from '../lib/foPnlCalc'
 import { formatIndian } from '../lib/format'
 
@@ -19,6 +20,14 @@ export default function FoTrades() {
   const [summary, setSummary] = useState(null)
   const [allPnl, setAllPnl] = useState([])
   const [allSummary, setAllSummary] = useState(null)
+
+  // Contract note PDF
+  const pdfRef = useRef()
+  const [pdfAccountId, setPdfAccountId] = useState('')
+  const [pdfParsed, setPdfParsed] = useState(null)
+  const [pdfParsing, setPdfParsing] = useState(false)
+  const [pdfStatus, setPdfStatus] = useState(null)
+  const [pdfInserting, setPdfInserting] = useState(false)
 
   // Filters
   const [filterAccount, setFilterAccount] = useState('')
@@ -159,6 +168,84 @@ export default function FoTrades() {
     setUploading(false)
   }
 
+  const handlePdfSelect = async (e) => {
+    const file = pdfRef.current?.files?.[0]
+    if (!file) return
+    setPdfStatus(null)
+    setPdfParsed(null)
+    setPdfParsing('Reading PDF...')
+    try {
+      const buf = await file.arrayBuffer()
+      setPdfParsing('Parsing pages...')
+      const result = await parseContractNotePdf(buf)
+      setPdfParsed(result)
+      setPdfParsing(false)
+    } catch (err) {
+      setPdfStatus({ type: 'error', msg: `PDF parse failed: ${err.message}` })
+      setPdfParsing(false)
+    }
+  }
+
+  const handleInsertSynthetic = async () => {
+    if (!pdfParsed || !pdfParsed.length || !supabase) return
+    setPdfInserting(true)
+    setPdfStatus({ type: 'info', msg: 'Checking duplicates...' })
+    try {
+      let rows = pdfParsed.map(r => ({
+        ...r,
+        account_id: pdfAccountId || null,
+        source_file: 'contract_note.pdf',
+      }))
+      const acct = pdfAccountId || null
+
+      // Dedup by trade_id (synthetic IDs are deterministic)
+      const tradeIds = rows.map(r => r.trade_id).filter(Boolean)
+      if (tradeIds.length) {
+        const chunkSize = 500
+        const existingIds = new Set()
+        for (let i = 0; i < tradeIds.length; i += chunkSize) {
+          const chunk = tradeIds.slice(i, i + chunkSize)
+          let q = supabase.from('fo_transactions').select('trade_id').in('trade_id', chunk)
+          if (acct) q = q.eq('account_id', acct); else q = q.is('account_id', null)
+          const { data: existing } = await q
+          if (existing) existing.forEach(r => existingIds.add(r.trade_id))
+        }
+        rows = rows.filter(r => !r.trade_id || !existingIds.has(r.trade_id))
+      }
+
+      const skipped = pdfParsed.length - rows.length
+      if (!rows.length) {
+        setPdfStatus({ type: 'warn', msg: 'All synthetic entries already exist' })
+        setPdfInserting(false)
+        return
+      }
+
+      setPdfStatus({ type: 'info', msg: `Inserting ${rows.length} synthetic closes...` })
+      const batchSize = 500
+      let inserted = []
+      for (let i = 0; i < rows.length; i += batchSize) {
+        const batch = rows.slice(i, i + batchSize)
+        const { data, error } = await supabase.from('fo_transactions').insert(batch).select()
+        if (error) throw new Error(error.message)
+        if (data) inserted.push(...data)
+      }
+
+      if (inserted.length) {
+        const allTxns = [...inserted, ...foTxns]
+        setFoTxns(allTxns)
+        computePnl(allTxns)
+        const lines = [`✓ Inserted ${inserted.length} synthetic expiry closes`]
+        if (skipped > 0) lines.push(`↻ Skipped ${skipped} existing`)
+        setPdfStatus({ type: 'success', msg: lines.join('\n') })
+        setPdfParsed(null)
+        pdfRef.current.value = ''
+      }
+    } catch (err) {
+      setPdfStatus({ type: 'error', msg: `Insert failed: ${err.message}` })
+    }
+    setPdfInserting(false)
+  }
+
   if (!supabase) return <p className="text-gray-500 text-center mt-10">Connect Supabase</p>
   if (loading) return <p className="text-gray-500 text-center mt-10">Loading...</p>
 
@@ -210,6 +297,49 @@ export default function FoTrades() {
             )}
             {uploadStatus && (
               <div className={`text-sm whitespace-pre-line ${uploadStatus.type === 'success' ? 'text-green-400' : uploadStatus.type === 'error' ? 'text-red-400' : 'text-yellow-400'}`}>{uploadStatus.msg}</div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Upload Contract Note PDF (Zerodha)</p>
+        <div className="flex gap-2 mb-3">
+          <select value={pdfAccountId} onChange={(e) => setPdfAccountId(e.target.value)}
+            className="bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm flex-1">
+            <option value="">Select account</option>
+            {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        </div>
+        <input ref={pdfRef} type="file" accept=".pdf" onChange={handlePdfSelect}
+          className="text-sm text-gray-400 file:mr-3 file:bg-purple-600 file:hover:bg-purple-500 file:text-white file:border-0 file:rounded-lg file:px-3 file:py-2 file:text-sm file:font-medium" />
+        {pdfParsing && <p className="text-xs text-yellow-400 mt-3">Parsing PDF ({pdfParsing})...</p>}
+        {pdfParsed && (
+          <div className="mt-3 space-y-2">
+            <p className="text-xs text-gray-500">Found {pdfParsed.length} synthetic expiry entries</p>
+            {pdfParsed.length > 0 && (
+              <>
+                <div className="max-h-40 overflow-y-auto space-y-1 rounded-xl bg-gray-800/50 p-2">
+                  {pdfParsed.slice(0, 10).map((r, i) => (
+                    <div key={i} className="text-xs flex gap-3 text-gray-300">
+                      <span className="w-20 text-gray-500">{r.date}</span>
+                      <span className="w-8 text-gray-500">{r.type.toUpperCase()}</span>
+                      <span className="w-28 font-semibold text-white truncate">{r.symbol}</span>
+                      <span className="w-12 text-right">{formatIndian(r.qty)}</span>
+                      <span className="w-16 text-right">@{formatIndian(r.price)}</span>
+                      <span className="w-20 text-gray-500">exp {r.expiry_date}</span>
+                    </div>
+                  ))}
+                  {pdfParsed.length > 10 && <p className="text-xs text-gray-600">...and {pdfParsed.length - 10} more</p>}
+                </div>
+                <button onClick={handleInsertSynthetic} disabled={pdfInserting}
+                  className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg text-sm font-medium w-full">
+                  {pdfInserting ? 'Inserting...' : `Insert ${pdfParsed.length} synthetic closes`}
+                </button>
+              </>
+            )}
+            {pdfStatus && (
+              <div className={`text-sm whitespace-pre-line ${pdfStatus.type === 'success' ? 'text-green-400' : pdfStatus.type === 'error' ? 'text-red-400' : 'text-yellow-400'}`}>{pdfStatus.msg}</div>
             )}
           </div>
         )}
