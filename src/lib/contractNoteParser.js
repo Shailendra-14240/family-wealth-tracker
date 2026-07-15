@@ -11,11 +11,6 @@ function parsePdfDate(s) {
   return `${y}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}`
 }
 
-function nextLine(text, from) {
-  const nl = text.indexOf('\n', from)
-  return nl !== -1 ? nl + 1 : text.length
-}
-
 export async function parseContractNotePdf(arrayBuffer) {
   const pdf = await getDocument({ data: arrayBuffer }).promise
   const syntheticTxns = []
@@ -32,7 +27,7 @@ export async function parseContractNotePdf(arrayBuffer) {
       return a.transform[4] - b.transform[4]
     })
 
-    // Build continuous page text (always space between same-line items)
+    // Build page text: space between same-row items, newline between rows
     let lastY = null
     let text = ''
     for (const item of items) {
@@ -47,32 +42,41 @@ export async function parseContractNotePdf(arrayBuffer) {
     const td = text.match(/Trade Date:\s*(\d{2}\/\d{2}\/\d{4})/)
     if (td) currentTradeDate = parsePdfDate(td[1])
 
-    // Find 111111 synthetic expiry entries
-    // Only match at line start to avoid double-matching the TradeNo 111111
-    const lineRegex = /^(?:111111\s+\d{2}:\d{2}:\d{2}\s+111111\s+\d{2}:\d{2}:\d{2}\s+)(.+)$/gm
-    let m
-    while ((m = lineRegex.exec(text)) !== null) {
-      const fullLine = m[0]
-      const rest = m[1]
+    // Find 111111 synthetic entries — use indexOf + context scan (not line-dependent)
+    // Pattern: 11111 hh:mm:ss 11111 hh:mm:ss then within ~300 chars find BS EXCH QTY
+    let pos = 0
+    while (true) {
+      pos = text.indexOf('111111', pos)
+      if (pos === -1) break
 
-      // Find B/S indicator in the rest
-      const bsMatch = rest.match(/\s([BS])\s+([A-Z]{2,5})\s+(\d+)\s+([\d.]+)\s+([\d.]+)\s+/)
-      if (!bsMatch) continue
+      // Check this is a synthetic entry (followed by time pattern + another 111111 + time)
+      const ctx = text.slice(pos, pos + 300)
+      const headerMatch = ctx.match(/^111111\s+\d{2}:\d{2}:\d{2}\s+111111\s+\d{2}:\d{2}:\d{2}\s+/)
+      if (!headerMatch) { pos += 6; continue }
 
-      // Symbol is everything before B/S, first token
+      const rest = ctx.slice(headerMatch[0].length)
+
+      // In rest, find B/S followed by exchange, qty, brokerage, netRate, netTotal
+      // The /expiryDay between symbol and B/S is optional
+      const bsMatch = rest.match(/\s([BS])\s+([A-Z]{2,5})\s+(\d+)\s+([\d.]+)\s+([\d.]+)\s/)
+      if (!bsMatch) { pos += 6; continue }
+
+      // Symbol = everything before B/S match, strip leading/trailing / numbers etc
       const beforeBS = rest.slice(0, bsMatch.index).trim()
+        .replace(/^[\s\/]+|[\s\/]+$/g, '')
       const symbol = beforeBS.split(/[\s\/]+/)[0].toUpperCase()
 
-      if (!symbol || symbol.includes('-AF') || symbol.includes('-EQ') || symbol.includes('-A')) continue
+      // Filter out AF/EQ entries
+      if (!symbol || /-[AFEQ]/.test(symbol)) { pos += 6; continue }
 
       const bs = bsMatch[1]
       const qty = parseInt(bsMatch[3], 10)
       const netRate = parseFloat(bsMatch[5])
 
-      if (!qty || qty <= 0) continue
+      if (!qty || qty <= 0) { pos += 6; continue }
 
       syntheticTxns.push({
-        symbol: symbol.toUpperCase(),
+        symbol,
         type: bs === 'B' ? 'buy' : 'sell',
         qty,
         price: netRate || 0,
@@ -83,8 +87,9 @@ export async function parseContractNotePdf(arrayBuffer) {
         order_execution_time: null,
         exchange: 'NSE',
         isin: null,
-        is_synthetic: true,
       })
+
+      pos += 6
     }
   }
 
