@@ -29,6 +29,7 @@ export function calculateFoPnl(transactions) {
     const lots = [] // { qty: +/-N, price: N }
     let realizedPnl = 0
     const lotRecords = []
+    const completedRecords = [] // fully matched lots saved for display
 
     for (const evt of txns) {
       if (evt.type === 'buy') {
@@ -44,7 +45,15 @@ export function calculateFoPnl(transactions) {
           realizedPnl += matched * (lot.price - evt.price)
           lot.qty += matched
           remaining -= matched
+
+          // Update lot record for short position
+          if (lotRecords.length > 0) {
+            lotRecords[0].remainingQty += matched
+            lotRecords[0].closes.push({ date: evt.date, qty: matched, price: evt.price, pnl: matched * (lot.price - evt.price) })
+          }
+
           if (lot.qty === 0) {
+            if (lotRecords.length > 0) completedRecords.push(lotRecords[0])
             lots.shift()
             lotRecords.shift()
           }
@@ -83,6 +92,7 @@ export function calculateFoPnl(transactions) {
           }
 
           if (lot.qty === 0) {
+            if (lotRecords.length > 0) completedRecords.push(lotRecords[0])
             lots.shift()
             lotRecords.shift()
           }
@@ -115,7 +125,7 @@ export function calculateFoPnl(transactions) {
           price: l.price,
           openDate: lotRecords[i]?.openDate || '',
         })),
-        lotRecords: lotRecords.filter(r => r.closes.length > 0 || r.remainingQty !== 0),
+        lotRecords: [...completedRecords, ...lotRecords].filter(r => r.closes.length > 0 || r.remainingQty !== 0),
       }
     }
   }
