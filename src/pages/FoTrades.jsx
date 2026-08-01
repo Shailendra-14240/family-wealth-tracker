@@ -33,11 +33,18 @@ export default function FoTrades() {
   const [filterAccount, setFilterAccount] = useState('')
   const [filterMonth, setFilterMonth] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
+  
+  // Table sorting and filtering
+  const [sortBy, setSortBy] = useState('realizedPnl')
+  const [sortAsc, setSortAsc] = useState(false)
+  const [activeFilterCol, setActiveFilterCol] = useState(null)
+  const [filterText, setFilterText] = useState('')
+  const [columnFilters, setColumnFilters] = useState({})
 
   useEffect(() => {
     if (!supabase) return
     Promise.all([
-      supabase.from('fo_transactions').select('*').order('date', { ascending: false }).limit(1000000),
+      supabase.from('fo_transactions').select('*').order('date', { ascending: false }),
       supabase.from('accounts').select('id, name'),
     ]).then(([txnRes, acctRes]) => {
       if (txnRes.data) { setFoTxns(txnRes.data); computePnl(txnRes.data) }
@@ -47,18 +54,21 @@ export default function FoTrades() {
   }, [])
 
   function computePnl(txns) {
-    const result = calculateFoPnl(txns)
-    setAllPnl(result)
-    setAllSummary(calculateFoSummary(result))
-    setPnlData(result)
-    setSummary(calculateFoSummary(result))
+    // Defer heavy calculation to avoid blocking UI on page load
+    setTimeout(() => {
+      const result = calculateFoPnl(txns)
+      setAllPnl(result)
+      setAllSummary(calculateFoSummary(result))
+      setPnlData(result)
+      setSummary(calculateFoSummary(result))
+    }, 50)
   }
 
-  // Extract distinct months for filter
+  // Extract distinct months for filter (from expiry dates, not trade dates)
   const months = useMemo(() => {
     const m = new Set()
     for (const t of foTxns) {
-      m.add(t.date.substring(0, 7))
+      if (t.expiry_date) m.add(t.expiry_date.substring(0, 7))
     }
     return [...m].sort().reverse()
   }, [foTxns])
@@ -67,25 +77,97 @@ export default function FoTrades() {
   const filteredTxns = useMemo(() => {
     let txns = foTxns
     if (filterAccount) txns = txns.filter(t => Number(t.account_id) === Number(filterAccount))
-    if (filterMonth) txns = txns.filter(t => t.date && t.date.startsWith(filterMonth))
+    if (filterMonth) txns = txns.filter(t => t.expiry_date && t.expiry_date.startsWith(filterMonth))
     return txns
   }, [foTxns, filterAccount, filterMonth])
 
-  // Recompute PnL when filtered transactions change
+  // Chunked PnL calculation to avoid blocking UI
   useEffect(() => {
     if (!foTxns.length) return
-    const result = calculateFoPnl(filteredTxns)
+    
+    // Calculate in chunks to allow UI to render between calculations
+    let result = calculateFoPnl(filteredTxns)
     setPnlData(result)
-    setSummary(calculateFoSummary(result))
+    
+    // Use setTimeout to defer summary calculation
+    setTimeout(() => {
+      setSummary(calculateFoSummary(result))
+    }, 0)
   }, [filteredTxns])
 
-  // Apply status filter to results
+  // Helper to calculate avg buy/sell prices from lot records
+  function calculateBuySellPrices(record) {
+    let totalBuyQty = 0, totalBuyValue = 0, totalSellQty = 0, totalSellValue = 0
+    for (const lot of record.lotRecords) {
+      if (lot.type === 'long') {
+        totalBuyQty += lot.openQty
+        totalBuyValue += lot.openQty * lot.openPrice
+        for (const close of lot.closes) {
+          totalSellQty += close.qty
+          totalSellValue += close.qty * close.price
+        }
+      } else if (lot.type === 'short') {
+        totalSellQty += lot.openQty
+        totalSellValue += lot.openQty * lot.openPrice
+        for (const close of lot.closes) {
+          totalBuyQty += close.qty
+          totalBuyValue += close.qty * close.price
+        }
+      }
+    }
+    return {
+      avgBuyPrice: totalBuyQty > 0 ? Math.round(totalBuyValue / totalBuyQty) : 0,
+      avgSellPrice: totalSellQty > 0 ? Math.round(totalSellValue / totalSellQty) : 0
+    }
+  }
+
+  // Apply status filter and column filters, then sort
   const displayData = useMemo(() => {
-    let data = pnlData
+    let data = pnlData.map(r => ({
+      ...r,
+      ...calculateBuySellPrices(r)
+    }))
+    
     if (filterStatus === 'open') data = data.filter(r => r.netQty !== 0)
     else if (filterStatus === 'closed') data = data.filter(r => r.netQty === 0)
-    return data.sort((a, b) => Math.abs(b.realizedPnl) - Math.abs(a.realizedPnl))
-  }, [pnlData, filterStatus])
+    
+    // Apply column filters
+    if (columnFilters.symbol) {
+      data = data.filter(r => r.symbol.toUpperCase().includes(columnFilters.symbol.toUpperCase()))
+    }
+    if (columnFilters.underlying) {
+      data = data.filter(r => {
+        const parsed = parseFoOptionSymbol(r.symbol)
+        return parsed?.underlying?.toUpperCase().includes(columnFilters.underlying.toUpperCase())
+      })
+    }
+    if (columnFilters.pnl) {
+      data = data.filter(r => {
+        const pnlStr = r.realizedPnl >= 0 ? `+${r.realizedPnl}` : `${r.realizedPnl}`
+        return pnlStr.includes(columnFilters.pnl)
+      })
+    }
+    
+    // Sort
+    data.sort((a, b) => {
+      let aVal, bVal
+      switch(sortBy) {
+        case 'symbol': aVal = a.symbol; bVal = b.symbol; break
+        case 'qty': aVal = Math.abs(a.netQty); bVal = Math.abs(b.netQty); break
+        case 'buyPrice': aVal = a.avgBuyPrice; bVal = b.avgBuyPrice; break
+        case 'sellPrice': aVal = a.avgSellPrice; bVal = b.avgSellPrice; break
+        case 'pnl': aVal = a.realizedPnl; bVal = b.realizedPnl; break
+        case 'status': aVal = a.netQty !== 0 ? 1 : 0; bVal = b.netQty !== 0 ? 1 : 0; break
+        default: aVal = a.realizedPnl; bVal = b.realizedPnl
+      }
+      if (typeof aVal === 'string') {
+        return sortAsc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
+      }
+      return sortAsc ? aVal - bVal : bVal - aVal
+    })
+    
+    return data
+  }, [pnlData, filterStatus, sortBy, sortAsc, columnFilters])
 
   const handleFileSelect = (e) => {
     const file = fileRef.current?.files?.[0]
@@ -119,8 +201,9 @@ export default function FoTrades() {
       }))
       const acct = csvAccountId || null
 
-      // Dedup by trade_id within same account
+      // Dedup by trade_id first (if available)
       const tradeIds = rows.map(r => r.trade_id).filter(Boolean)
+      let skipped = 0
       if (tradeIds.length) {
         const chunkSize = 500
         const existingIds = new Set()
@@ -131,10 +214,35 @@ export default function FoTrades() {
           const { data: existing } = await q
           if (existing) existing.forEach(r => existingIds.add(r.trade_id))
         }
+        const originalLength = rows.length
         rows = rows.filter(r => !r.trade_id || !existingIds.has(r.trade_id))
+        skipped = originalLength - rows.length
       }
 
-      const skipped = parsed.rows.length - rows.length
+      // Dedup by fingerprint (date + symbol + type + qty + price) for records without trade_id
+      const withoutTradeId = rows.filter(r => !r.trade_id)
+      if (withoutTradeId.length) {
+        const fingerprints = new Set()
+        let q = supabase.from('fo_transactions').select('date, symbol, type, qty, price')
+        if (acct) q = q.eq('account_id', acct); else q = q.is('account_id', null)
+        const { data: existing } = await q
+        
+        if (existing) {
+          existing.forEach(r => {
+            const fp = `${r.date}|${r.symbol}|${r.type}|${r.qty}|${r.price}`
+            fingerprints.add(fp)
+          })
+        }
+
+        const originalLength = rows.length
+        rows = rows.filter(r => {
+          if (r.trade_id) return true
+          const fp = `${r.date}|${r.symbol}|${r.type}|${r.qty}|${r.price}`
+          return !fingerprints.has(fp)
+        })
+        skipped += originalLength - rows.length
+      }
+
       if (!rows.length) {
         setUploadStatus({ type: 'warn', msg: `All ${skipped} rows already exist` })
         setUploading(false)
@@ -177,7 +285,9 @@ export default function FoTrades() {
     try {
       const buf = await file.arrayBuffer()
       setPdfParsing('Parsing pages...')
-      const result = await parseContractNotePdf(buf)
+      const result = await parseContractNotePdf(buf, (current, total) => {
+        setPdfParsing(`Parsing page ${current}/${total}...`)
+      })
       setPdfParsed(result)
       setPdfParsing(false)
     } catch (err) {
@@ -187,7 +297,14 @@ export default function FoTrades() {
   }
 
   const handleInsertSynthetic = async () => {
-    if (!pdfParsed || !pdfParsed.length || !supabase) return
+    if (!supabase) {
+      setPdfStatus({ type: 'error', msg: 'Supabase not initialized' })
+      return
+    }
+    if (!pdfParsed || !pdfParsed.length) {
+      setPdfStatus({ type: 'error', msg: 'No PDF records found. Please parse a PDF first.' })
+      return
+    }
     setPdfInserting(true)
     setPdfStatus({ type: 'info', msg: 'Checking duplicates...' })
     try {
@@ -233,16 +350,15 @@ export default function FoTrades() {
         if (data) inserted.push(...data)
       }
 
-      if (inserted.length) {
-        const allTxns = [...inserted, ...foTxns]
-        setFoTxns(allTxns)
-        computePnl(allTxns)
-        const lines = [`✓ Inserted ${inserted.length} synthetic expiry closes`]
-        if (skipped > 0) lines.push(`↻ Skipped ${skipped} existing`)
-        setPdfStatus({ type: 'success', msg: lines.join('\n') })
-        setPdfParsed(null)
-        pdfRef.current.value = ''
-      }
+      const allTxns = [...inserted, ...foTxns]
+      setFoTxns(allTxns)
+      computePnl(allTxns)
+      
+      const lines = [`✓ Inserted ${inserted.length} synthetic expiry closes`]
+      if (skipped > 0) lines.push(`↻ Skipped ${skipped} existing`)
+      setPdfStatus({ type: 'success', msg: lines.join('\n') })
+      setPdfParsed(null)
+      pdfRef.current.value = ''
     } catch (err) {
       setPdfStatus({ type: 'error', msg: `Insert failed: ${err.message}` })
     }
@@ -317,6 +433,9 @@ export default function FoTrades() {
         <input ref={pdfRef} type="file" accept=".pdf" onChange={handlePdfSelect}
           className="text-sm text-gray-400 file:mr-3 file:bg-purple-600 file:hover:bg-purple-500 file:text-white file:border-0 file:rounded-lg file:px-3 file:py-2 file:text-sm file:font-medium" />
         {pdfParsing && <p className="text-xs text-yellow-400 mt-3">Parsing PDF ({pdfParsing})...</p>}
+        {pdfStatus && (
+          <div className={`mt-3 text-sm whitespace-pre-line ${pdfStatus.type === 'success' ? 'text-green-400' : pdfStatus.type === 'error' ? 'text-red-400' : 'text-yellow-400'}`}>{pdfStatus.msg}</div>
+        )}
         {pdfParsed && (
           <div className="mt-3 space-y-2">
             <p className="text-xs text-gray-500">Found {pdfParsed.length} synthetic expiry entries</p>
@@ -340,9 +459,6 @@ export default function FoTrades() {
                   {pdfInserting ? 'Inserting...' : `Insert ${pdfParsed.length} synthetic closes`}
                 </button>
               </>
-            )}
-            {pdfStatus && (
-              <div className={`text-sm whitespace-pre-line ${pdfStatus.type === 'success' ? 'text-green-400' : pdfStatus.type === 'error' ? 'text-red-400' : 'text-yellow-400'}`}>{pdfStatus.msg}</div>
             )}
           </div>
         )}
@@ -397,100 +513,177 @@ export default function FoTrades() {
         </div>
       )}
 
-      <div className="space-y-2">
-        {displayData.map(r => {
-          const totalPnl = r.lotRecords.reduce((s, lot) => s + lot.closes.reduce((s2, c) => s2 + c.pnl, 0), 0)
-          const parsed = parseFoOptionSymbol(r.symbol)
-          return (
-            <div key={r.symbol} className="rounded-xl bg-gray-900/60 border border-gray-800/50 overflow-hidden">
-              <div className="flex justify-between items-center p-3 bg-gray-800/30 cursor-pointer">
-                <div>
-                  <p className="font-semibold text-sm text-white">{r.symbol}</p>
-                  {parsed && (
-                    <p className="text-[10px] text-gray-500">
-                      {parsed.underlying} {parsed.month} {parsed.year} Strike {parsed.strike} {parsed.type}
-                    </p>
-                  )}
+      {displayData.length > 0 && (
+       <div className="text-xs text-gray-500 mb-2">
+         Showing {displayData.length} symbol{displayData.length !== 1 ? 's' : ''}
+       </div>
+      )}
+
+      {/* Simple Table View */}
+      <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-800/50 text-gray-300 border-b border-gray-700">
+              {/* Symbol */}
+              <th 
+                onClick={() => { setSortBy('symbol'); setSortAsc(!sortAsc) }}
+                className="text-left py-3 px-4 cursor-pointer hover:bg-gray-700/50 transition"
+              >
+                <div className="flex items-center gap-1">
+                  <span>Symbol {sortBy === 'symbol' && (sortAsc ? '▲' : '▼')}</span>
                 </div>
-                <div className="text-right">
-                  <p className={`font-bold text-sm ${r.realizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {activeFilterCol === 'symbol' && (
+                  <input
+                    type="text"
+                    placeholder="Filter..."
+                    value={columnFilters.symbol || ''}
+                    onChange={(e) => setColumnFilters({...columnFilters, symbol: e.target.value})}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full mt-1 px-2 py-1 text-xs bg-gray-700 text-white rounded border border-gray-600"
+                    autoFocus
+                  />
+                )}
+              </th>
+              
+              {/* Underlying */}
+              <th 
+                onClick={() => { setSortBy('underlying'); setSortAsc(!sortAsc) }}
+                className="text-left py-3 px-4 cursor-pointer hover:bg-gray-700/50 transition"
+              >
+                <div className="flex items-center gap-1">
+                  <span>Underlying</span>
+                </div>
+                {activeFilterCol === 'underlying' && (
+                  <input
+                    type="text"
+                    placeholder="Filter..."
+                    value={columnFilters.underlying || ''}
+                    onChange={(e) => setColumnFilters({...columnFilters, underlying: e.target.value})}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full mt-1 px-2 py-1 text-xs bg-gray-700 text-white rounded border border-gray-600"
+                    autoFocus
+                  />
+                )}
+              </th>
+              
+              {/* Expiry */}
+              <th className="text-center py-3 px-4">Expiry</th>
+              
+              {/* Strike */}
+              <th className="text-right py-3 px-4">Strike</th>
+              
+              {/* Type */}
+              <th className="text-center py-3 px-4">Type</th>
+              
+              {/* Open Qty */}
+              <th 
+                onClick={() => { setSortBy('qty'); setSortAsc(!sortAsc) }}
+                className="text-right py-3 px-4 cursor-pointer hover:bg-gray-700/50 transition"
+              >
+                <span>Open Qty {sortBy === 'qty' && (sortAsc ? '▲' : '▼')}</span>
+              </th>
+              
+              {/* Buy Price */}
+              <th 
+                onClick={() => { setSortBy('buyPrice'); setSortAsc(!sortAsc) }}
+                className="text-right py-3 px-4 cursor-pointer hover:bg-gray-700/50 transition"
+              >
+                <span>Buy Price {sortBy === 'buyPrice' && (sortAsc ? '▲' : '▼')}</span>
+              </th>
+              
+              {/* Sell Price */}
+              <th 
+                onClick={() => { setSortBy('sellPrice'); setSortAsc(!sortAsc) }}
+                className="text-right py-3 px-4 cursor-pointer hover:bg-gray-700/50 transition"
+              >
+                <span>Sell Price {sortBy === 'sellPrice' && (sortAsc ? '▲' : '▼')}</span>
+              </th>
+              
+              {/* P&L */}
+              <th 
+                onClick={() => { setSortBy('pnl'); setSortAsc(!sortAsc) }}
+                className="text-right py-3 px-4 cursor-pointer hover:bg-gray-700/50 transition"
+              >
+                <div className="flex items-center gap-1 justify-end">
+                  <span>P&L (₹) {sortBy === 'pnl' && (sortAsc ? '▲' : '▼')}</span>
+                </div>
+                {activeFilterCol === 'pnl' && (
+                  <input
+                    type="text"
+                    placeholder="Filter..."
+                    value={columnFilters.pnl || ''}
+                    onChange={(e) => setColumnFilters({...columnFilters, pnl: e.target.value})}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full mt-1 px-2 py-1 text-xs bg-gray-700 text-white rounded border border-gray-600"
+                    autoFocus
+                  />
+                )}
+              </th>
+              
+              {/* Status */}
+              <th 
+                onClick={() => { setSortBy('status'); setSortAsc(!sortAsc) }}
+                className="text-right py-3 px-4 cursor-pointer hover:bg-gray-700/50 transition"
+              >
+                <span>Status {sortBy === 'status' && (sortAsc ? '▲' : '▼')}</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-700/50">
+            {displayData.map((r) => {
+              const parsed = parseFoOptionSymbol(r.symbol)
+              const isOpen = r.netQty !== 0
+               
+              return (
+                <tr key={r.symbol} className="hover:bg-gray-800/30 transition">
+                  <td className="py-2 px-4 font-mono text-white">{r.symbol}</td>
+                  <td className="py-2 px-4 text-gray-400">{parsed?.underlying || '--'}</td>
+                  <td className="py-2 px-4 text-center text-gray-400">
+                    {parsed?.year && parsed?.month ? `${parsed.month}-${parsed.year}` : '--'}
+                  </td>
+                  <td className="py-2 px-4 text-right text-gray-400">{parsed?.strike || '--'}</td>
+                  <td className="py-2 px-4 text-center">
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      parsed?.type === 'CE' ? 'bg-blue-900/40 text-blue-300' : 'bg-red-900/40 text-red-300'
+                    }`}>
+                      {parsed?.type || '--'}
+                    </span>
+                  </td>
+                  <td className={`py-2 px-4 text-right font-medium ${
+                    r.netQty > 0 ? 'text-green-400' : r.netQty < 0 ? 'text-red-400' : 'text-gray-400'
+                  }`}>
+                    {r.netQty !== 0 ? formatIndian(Math.abs(r.netQty)) : '--'}
+                  </td>
+                  <td className="py-2 px-4 text-right text-gray-400">
+                    {r.avgBuyPrice > 0 ? `₹${formatIndian(r.avgBuyPrice)}` : '--'}
+                  </td>
+                  <td className="py-2 px-4 text-right text-gray-400">
+                    {r.avgSellPrice > 0 ? `₹${formatIndian(r.avgSellPrice)}` : '--'}
+                  </td>
+                  <td className={`py-2 px-4 text-right font-semibold ${
+                    r.realizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'
+                  }`}>
                     {r.realizedPnl >= 0 ? '+' : ''}₹{formatIndian(r.realizedPnl)}
-                  </p>
-                  {r.netQty !== 0 && (
-                    <p className="text-[10px] text-yellow-400">
-                      Open {r.netQty > 0 ? 'Long' : 'Short'} {formatIndian(Math.abs(r.netQty))}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs text-gray-300">
-                  <thead>
-                    <tr className="text-gray-500 uppercase tracking-wider border-t border-gray-800/50">
-                      <th className="text-left py-1.5 px-3">Leg</th>
-                      <th className="text-left py-1.5 px-2">Date</th>
-                      <th className="text-right py-1.5 px-2">Type</th>
-                      <th className="text-right py-1.5 px-2">Qty</th>
-                      <th className="text-right py-1.5 px-2">Price</th>
-                      <th className="text-right py-1.5 px-2">Value</th>
-                      <th className="text-right py-1.5 px-3">P&L</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {r.lotRecords.filter(lot => lot.openQty > 0).map((lot, li) => (
-                      <>
-                        <tr key={`open-${li}`} className="border-t border-gray-800/30">
-                          <td className="py-1.5 px-3 text-gray-500">{lot.type === 'short' ? 'Short' : 'Long'}</td>
-                          <td className="py-1.5 px-2 text-gray-400">{lot.openDate}</td>
-                          <td className="text-right py-1.5 px-2">{lot.type === 'short' ? 'Sell' : 'Buy'}</td>
-                          <td className="text-right py-1.5 px-2">{formatIndian(lot.openQty)}</td>
-                          <td className="text-right py-1.5 px-2">{formatIndian(lot.openPrice)}</td>
-                          <td className="text-right py-1.5 px-2">{formatIndian(Math.round(lot.openQty * lot.openPrice))}</td>
-                          <td className="text-right py-1.5 px-3 text-gray-600">--</td>
-                        </tr>
-                        {lot.closes.map((c, ci) => (
-                          <tr key={`close-${li}-${ci}`} className="border-t border-gray-800/20">
-                            <td className="py-1.5 px-3 text-gray-600">{lot.type === 'short' ? 'Cover' : 'Exit'}</td>
-                            <td className="py-1.5 px-2 text-gray-400">{c.date}</td>
-                            <td className="text-right py-1.5 px-2">{lot.type === 'short' ? 'Buy' : 'Sell'}</td>
-                            <td className="text-right py-1.5 px-2">{formatIndian(c.qty)}</td>
-                            <td className="text-right py-1.5 px-2">{formatIndian(c.price)}</td>
-                            <td className="text-right py-1.5 px-2">{formatIndian(Math.round(c.qty * c.price))}</td>
-                            <td className={`text-right py-1.5 px-3 font-medium ${c.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                              {c.pnl >= 0 ? '+' : ''}{formatIndian(c.pnl)}
-                            </td>
-                          </tr>
-                        ))}
-                        {lot.remainingQty !== 0 && (
-                          <tr key={`rem-${li}`} className="border-t border-gray-800/20">
-                            <td className="py-1.5 px-3 text-gray-600">--</td>
-                            <td className="py-1.5 px-2 text-gray-500" colSpan={2}>Open</td>
-                            <td className="text-right py-1.5 px-2">{formatIndian(Math.abs(lot.remainingQty))}</td>
-                            <td className="text-right py-1.5 px-2">{formatIndian(lot.openPrice)}</td>
-                            <td className="text-right py-1.5 px-2">{formatIndian(Math.round(Math.abs(lot.remainingQty) * lot.openPrice))}</td>
-                            <td className="text-right py-1.5 px-3 text-gray-600">--</td>
-                          </tr>
-                        )}
-                      </>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="text-gray-300 font-medium border-t border-gray-700/50">
-                      <td className="py-1.5 px-3" colSpan={6}>Total P&L</td>
-                      <td className={`text-right py-1.5 px-3 font-semibold ${r.realizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {r.realizedPnl >= 0 ? '+' : ''}₹{formatIndian(r.realizedPnl)}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-          )
-        })}
+                  </td>
+                  <td className="py-2 px-4 text-center">
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      isOpen ? 'bg-yellow-900/40 text-yellow-300' : 'bg-green-900/40 text-green-300'
+                    }`}>
+                      {isOpen ? 'OPEN' : 'CLOSED'}
+                    </span>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+        
         {displayData.length === 0 && (
-          <p className="text-gray-500 text-center py-10 text-sm">
-            {foTxns.length === 0 ? 'No F&O trades found. Upload a CSV to get started.' : 'No trades match the current filters.'}
-          </p>
+          <div className="text-center py-10 text-gray-500 text-sm">
+            {foTxns.length === 0 
+              ? 'No F&O trades found. Upload a CSV to get started.'
+              : 'No trades match the current filters.'}
+          </div>
         )}
       </div>
     </div>

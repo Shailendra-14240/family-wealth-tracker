@@ -1,16 +1,49 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { calculateHoldings, calculateSummary } from '../lib/pnlCalc'
-import { formatIndian } from '../lib/format'
+import { formatIndian } from '../lib/format' // Removed isFOSymbol import
 import { fetchPrices } from '../lib/priceFeed'
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line, CartesianGrid,
-} from 'recharts'
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import clsx from 'clsx'
 
-const COLORS = ['#3b82f6', '#22c55e', '#a855f7', '#f59e0b', '#06b6d4', '#ec4899', '#84cc16', '#f97316']
+// --- Tooltip Components ---
+const NetWorthTooltip = ({ active, payload }) => {
+  if (active && payload?.length) {
+    return (
+      <div className="rounded-lg bg-gray-800/80 backdrop-blur-sm border border-gray-700/50 p-2.5 shadow-lg">
+        <p className="text-sm font-semibold text-white">₹{formatIndian(payload[0].value)}</p>
+        <p className="text-xs text-gray-400">{payload[0].payload.date}</p>
+      </div>
+    )
+  }
+  return null
+}
 
+const HoldingsTooltip = ({ active, payload }) => {
+  if (active && payload?.length) {
+    const d = payload[0].payload
+    return (
+      <div className="rounded-lg bg-gray-800/80 backdrop-blur-sm border border-gray-700/50 p-2.5 shadow-lg text-xs space-y-1">
+        <p className="font-bold text-white">{d.symbol}</p>
+        <p>Qty: <span className="font-medium text-gray-200">{formatIndian(d.qty)}</span></p>
+        <p>Avg. Cost: <span className="font-medium text-gray-200">₹{formatIndian(d.avgCost)}</span></p>
+        {d.currentPrice > 0 && <p>LTP: <span className="font-medium text-gray-200">₹{formatIndian(d.currentPrice)}</span></p>}
+        <p>Invested: <span className="font-medium text-blue-400">₹{formatIndian(d.invested)}</span></p>
+        {d.marketValue > 0 && <p>Market Value: <span className="font-medium text-purple-400">₹{formatIndian(d.marketValue)}</span></p>}
+        {d.unrealizedPnl !== 0 && (
+          <p className={clsx('font-bold', d.unrealizedPnl > 0 ? 'text-emerald-400' : 'text-red-400')}>
+            P/L: {d.unrealizedPnl > 0 ? '+' : ''}₹{formatIndian(d.unrealizedPnl)}
+          </p>
+        )}
+      </div>
+    )
+  }
+  return null
+}
+
+// --- Main Dashboard Component ---
 export default function Dashboard() {
+  // --- State ---
   const [accounts, setAccounts] = useState([])
   const [allTxns, setAllTxns] = useState([])
   const [allActions, setAllActions] = useState([])
@@ -18,322 +51,200 @@ export default function Dashboard() {
   const [currentPrices, setCurrentPrices] = useState({})
   const [loading, setLoading] = useState(true)
 
+  // --- Data Fetching ---
   useEffect(() => {
     if (!supabase) return
+    setLoading(true)
     Promise.all([
       supabase.from('accounts').select('*'),
       supabase.from('transactions').select('*').limit(1000000),
       supabase.from('corporate_actions').select('*'),
-      supabase.from('net_worth_snapshots').select('*').order('date').limit(200),
+      supabase.from('net_worth_snapshots').select('*').order('date').limit(365),
     ]).then(([acctRes, txnRes, actRes, snapRes]) => {
       if (acctRes.data) setAccounts(acctRes.data)
       if (txnRes.data) setAllTxns(txnRes.data)
       if (actRes.data) setAllActions(actRes.data)
       if (snapRes.data) setSnapshots(snapRes.data)
       setLoading(false)
+    }).catch(err => {
+      console.error(err)
+      setLoading(false)
     })
   }, [])
 
-  const holdings = useMemo(() => {
-    if (!allTxns.length) return []
-    return calculateHoldings(allTxns, allActions)
-  }, [allTxns, allActions])
-
+  // --- Calculations ---
+  const holdings = useMemo(() => calculateHoldings(allTxns, allActions), [allTxns, allActions])
   const summary = useMemo(() => calculateSummary(holdings), [holdings])
-
-  const perAccount = useMemo(() => {
-    if (!allTxns.length || !accounts.length) return []
-    return accounts
-      .map(acct => {
-        const txns = allTxns.filter(t => t.account_id === acct.id)
-        if (!txns.length) return { ...acct, invested: 0, realizedPnl: 0, unrealizedPnl: 0 }
-        const h = calculateHoldings(txns, allActions)
-        const s = calculateSummary(h)
-        let unrealizedPnl = 0
-        for (const pos of h) {
-          if (pos.qty <= 0) continue
-          const price = currentPrices[pos.symbol]
-          if (price != null && price > 0) {
-            unrealizedPnl += (price - pos.avgCost) * pos.qty
-          }
-        }
-        return { ...acct, invested: s.totalInvested, realizedPnl: s.totalRealizedPnl, unrealizedPnl: Math.round(unrealizedPnl * 100) / 100 }
-      })
-      .filter(a => a.invested !== 0 || a.realizedPnl !== 0 || a.unrealizedPnl !== 0 || Number(a.balance) !== 0)
-  }, [allTxns, allActions, accounts, currentPrices])
-
-  const topHoldings = useMemo(() => {
-    const bySymbol = {}
-    for (const h of holdings) {
-      if (h.qty > 0) {
-        if (!bySymbol[h.symbol]) bySymbol[h.symbol] = { invested: 0, qty: 0 }
-        bySymbol[h.symbol].invested += h.invested
-        bySymbol[h.symbol].qty += h.qty
-      }
-    }
-    return Object.entries(bySymbol)
-      .sort((a, b) => b[1].invested - a[1].invested)
-      .slice(0, 10)
-      .map(([symbol, data], i) => {
-        const currentPrice = currentPrices[symbol] || 0
-        const marketValue = currentPrice > 0 ? Math.round(currentPrice * data.qty) : 0
-        return {
-          symbol,
-          invested: Math.round(data.invested),
-          qty: Math.round(data.qty),
-          avgCost: Math.round(data.qty > 0 ? data.invested / data.qty : 0),
-          currentPrice: Math.round(currentPrice),
-          marketValue,
-          unrealizedPnl: marketValue > 0 ? Math.round((currentPrice - data.invested / data.qty) * data.qty) : 0,
-          fill: COLORS[i % COLORS.length],
-        }
-      })
-  }, [holdings, currentPrices])
-
-  const allOpenSymbols = useMemo(() => {
-    const syms = new Set()
-    for (const h of holdings) {
-      if (h.qty > 0) syms.add(h.symbol)
-    }
-    return [...syms]
-  }, [holdings])
-
-  const totalUnrealizedPnl = useMemo(() => {
-    let total = 0
-    for (const h of holdings) {
-      if (h.qty <= 0) continue
-      const price = currentPrices[h.symbol]
-      if (price != null && price > 0) {
-        total += (price - h.avgCost) * h.qty
-      }
-    }
-    return Math.round(total * 100) / 100
-  }, [holdings, currentPrices])
-
-  const symbolsToFetch = allOpenSymbols
+  const allOpenSymbols = useMemo(() => [...new Set(holdings.filter(h => h.qty > 0).map(h => h.symbol))], [holdings])
 
   useEffect(() => {
-    if (!symbolsToFetch.length) return
-    fetchPrices(symbolsToFetch).then(setCurrentPrices)
-    const iv = setInterval(() => fetchPrices(symbolsToFetch).then(setCurrentPrices), 180000)
-    return () => clearInterval(iv)
-  }, [symbolsToFetch])
+    if (!allOpenSymbols.length) return
+    const fetch = () => fetchPrices(allOpenSymbols).then(setCurrentPrices)
+    fetch()
+    const interval = setInterval(fetch, 180000)
+    return () => clearInterval(interval)
+  }, [allOpenSymbols])
 
-  const pnlByAccount = useMemo(() => {
-    return perAccount.map(a => ({
-      name: a.name,
-      realized: Math.round(a.realizedPnl),
-      unrealized: Math.round(a.unrealizedPnl),
-    }))
-  }, [perAccount])
+  const totalUnrealizedPnl = useMemo(() => {
+    return holdings.reduce((total, h) => {
+      if (h.qty <= 0) return total
+      const price = currentPrices[h.symbol]
+      return price > 0 ? total + (price - h.avgCost) * h.qty : total
+    }, 0)
+  }, [holdings, currentPrices])
 
-  const portfolioComposition = useMemo(() => {
+  const { netWorth, totalAssets, totalLiabilities } = useMemo(() => {
     const assets = accounts.filter(a => a.balance > 0).reduce((s, a) => s + Number(a.balance), 0)
-    const items = [
-      { name: 'Invested', value: Math.round(summary.totalInvested), color: '#3b82f6' },
-      { name: 'Cash', value: Math.round(assets), color: '#22c55e' },
-    ]
-    if (totalUnrealizedPnl !== 0) {
-      items.push({
-        name: 'Unrealized P&L',
-        value: Math.abs(Math.round(totalUnrealizedPnl)),
-        color: totalUnrealizedPnl > 0 ? '#06b6d4' : '#ef4444',
+    const liabilities = accounts.filter(a => a.balance < 0).reduce((s, a) => s + Number(a.balance), 0)
+    const netWorth = assets + liabilities + summary.totalInvested + totalUnrealizedPnl
+    return { netWorth, totalAssets: assets, totalLiabilities: liabilities }
+  }, [accounts, summary.totalInvested, totalUnrealizedPnl])
+
+  const perAccountSummary = useMemo(() => {
+    if (!accounts.length) return []
+    return accounts.map(acct => {
+      const txns = allTxns.filter(t => t.account_id === acct.id)
+      const h = calculateHoldings(txns, allActions)
+      const s = calculateSummary(h)
+      const unrealizedPnl = h.reduce((total, pos) => {
+        if (pos.qty <= 0) return total
+        const price = currentPrices[pos.symbol]
+        return price > 0 ? total + (price - pos.avgCost) * pos.qty : total
+      }, 0)
+      return {
+        ...acct,
+        invested: s.totalInvested,
+        realizedPnl: s.totalRealizedPnl,
+        unrealizedPnl,
+      }
+    })
+  }, [accounts, allTxns, allActions, currentPrices])
+
+  const topHoldings = useMemo(() => {
+    const bySymbol = holdings.reduce((acc, h) => {
+      if (h.qty > 0) {
+        if (!acc[h.symbol]) acc[h.symbol] = { invested: 0, qty: 0 }
+        acc[h.symbol].invested += h.invested
+        acc[h.symbol].qty += h.qty
+      }
+      return acc
+    }, {})
+
+    return Object.entries(bySymbol)
+      .map(([symbol, data]) => {
+        const currentPrice = currentPrices[symbol] || 0
+        const marketValue = currentPrice * data.qty
+        const unrealizedPnl = marketValue - data.invested
+        return { symbol, invested: data.invested, qty: data.qty, avgCost: data.invested / data.qty, currentPrice, marketValue, unrealizedPnl }
       })
-    }
-    if (summary.totalRealizedPnl !== 0) {
-      items.push({
-        name: 'Realized P&L',
-        value: Math.abs(Math.round(summary.totalRealizedPnl)),
-        color: summary.totalRealizedPnl > 0 ? '#a855f7' : '#ef4444',
-      })
-    }
-    return items.filter(d => d.value > 0)
-  }, [summary, accounts, totalUnrealizedPnl])
+      .sort((a, b) => b.marketValue - a.marketValue)
+      .slice(0, 10)
+  }, [holdings, currentPrices])
 
-  if (!supabase) return <p className="text-gray-500 text-center mt-10">Connect Supabase to see live data</p>
-  if (loading) return <p className="text-gray-500 text-center mt-10">Loading...</p>
-
-  const assets = accounts.filter((a) => a.balance > 0).reduce((s, a) => s + Number(a.balance), 0)
-  const liabilities = accounts.filter((a) => a.balance < 0).reduce((s, a) => s + Number(a.balance), 0)
-  const netWorth = assets + liabilities + summary.totalInvested
-
-  const tooltipContent = { backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#f3f4f6', fontSize: '13px' }
+  // --- Render ---
+  if (!supabase) return <p className="text-center text-gray-500 mt-10">Connect Supabase to see live data</p>
+  if (loading) return <p className="text-center text-gray-500 mt-10">Loading...</p>
 
   return (
-    <div className="space-y-4">
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600/10 via-gray-900 to-purple-600/10 border border-gray-800/50 p-5 md:p-7">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/5 via-transparent to-transparent" />
-        <div className="relative">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-widest">Net Worth</p>
-          <p className="text-2xl sm:text-3xl md:text-5xl font-bold tracking-tight mt-1.5 bg-gradient-to-r from-blue-400 via-white to-purple-400 bg-clip-text text-transparent break-words">
-            ₹{formatIndian(netWorth)}
-          </p>
-          <div className="flex gap-6 mt-3">
-            <span className="flex items-center gap-1.5 text-sm">
-              <span className="w-2 h-2 rounded-full bg-emerald-400" />
-              <span className="text-emerald-400 font-medium">+₹{formatIndian(assets)}</span>
-            </span>
-            <span className="flex items-center gap-1.5 text-sm">
-              <span className="w-2 h-2 rounded-full bg-red-400" />
-              <span className="text-red-400 font-medium">-₹{formatIndian(Math.abs(liabilities))}</span>
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { label: 'Accounts', value: accounts.length, color: 'text-white' },
-          { label: 'Invested', value: `₹${formatIndian(summary.totalInvested)}`, color: 'text-blue-400' },
-          { label: 'Unrealized P&L', value: `${totalUnrealizedPnl >= 0 ? '+' : ''}₹${formatIndian(totalUnrealizedPnl)}`, color: totalUnrealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400' },
-          { label: 'Realized P&L', value: `${summary.totalRealizedPnl >= 0 ? '+' : ''}₹${formatIndian(summary.totalRealizedPnl)}`, color: summary.totalRealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400' },
-        ].map(stat => (
-          <div key={stat.label} className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3.5 md:p-4 text-center backdrop-blur-sm">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">{stat.label}</p>
-            <p className={`text-sm sm:text-base md:text-xl font-bold tracking-tight mt-0.5 truncate ${stat.color}`}>{stat.value}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Top Holdings</p>
-          {topHoldings.length > 0 ? (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={topHoldings} layout="vertical" margin={{ left: 5, right: 10 }}>
-                <XAxis type="number" tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="symbol" tick={{ fill: '#d1d5db', fontSize: 11 }} axisLine={false} tickLine={false} width={70} />
-                <Tooltip content={({ active, payload }) => {
-                  if (!active || !payload?.length) return null
-                  const d = payload[0].payload
-                  return (
-                    <div className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-xs space-y-1 shadow-lg">
-                      <div className="text-gray-300 font-medium">{d.symbol}</div>
-                      <div>Qty: <span className="text-white font-medium">{formatIndian(d.qty)}</span></div>
-                      <div>Avg Cost: <span className="text-white font-medium">₹{formatIndian(d.avgCost)}</span></div>
-                      {d.currentPrice > 0 && <div>LTP: <span className="text-white font-medium">₹{formatIndian(d.currentPrice)}</span></div>}
-                      <div>Invested: <span className="text-blue-400 font-medium">₹{formatIndian(d.invested)}</span></div>
-                      {d.marketValue > 0 && <div>Market Value: <span className="text-purple-400 font-medium">₹{formatIndian(d.marketValue)}</span></div>}
-                      {d.unrealizedPnl !== 0 && (
-                        <div className={`pt-1 border-t border-gray-700 font-medium ${d.unrealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                          Unrealized P&L: {d.unrealizedPnl >= 0 ? '+' : ''}₹{formatIndian(d.unrealizedPnl)}
-                        </div>
-                      )}
-                    </div>
-                  )
-                }} />
-                <Bar dataKey="invested" radius={[0, 4, 4, 0]}>
-                  {topHoldings.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-48 flex items-center justify-center text-gray-600 text-sm">No holdings data</div>
-          )}
-        </div>
-
-        <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">P&L by Account</p>
-          {pnlByAccount.length > 0 ? (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={pnlByAccount} margin={{ top: 0, right: 10, bottom: 0, left: -10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-                <XAxis dataKey="name" tick={{ fill: '#d1d5db', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={tooltipContent} formatter={(v, name) => [`₹${formatIndian(v)}`, name === 'realized' ? 'Realized' : 'Unrealized']} />
-                <Bar dataKey="unrealized" stackId="pnl" fill="#06b6d4" radius={[0, 0, 0, 0]} name="unrealized" />
-                <Bar dataKey="realized" stackId="pnl" fill="#22c55e" radius={[4, 4, 0, 0]} name="realized" />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-48 flex items-center justify-center text-gray-600 text-sm">No account data</div>
-          )}
-        </div>
-
-        <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Portfolio Composition</p>
-          {portfolioComposition.length > 0 ? (
-            <div className="flex items-center justify-center gap-4">
-              <ResponsiveContainer width="60%" height={200}>
-                <PieChart>
-                  <Pie data={portfolioComposition} cx="50%" cy="50%" innerRadius={45} outerRadius={75} dataKey="value" paddingAngle={3}>
-                    {portfolioComposition.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                  </Pie>
-                  <Tooltip contentStyle={tooltipContent} formatter={(v, name) => [`₹${formatIndian(v)}`, name]} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="space-y-2.5 text-xs">
-                {portfolioComposition.map((entry) => (
-                  <div key={entry.name} className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
-                    <span className="text-gray-400">{entry.name}</span>
-                    <span className="text-gray-200 font-medium">₹{formatIndian(entry.value)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="h-48 flex items-center justify-center text-gray-600 text-sm">No data</div>
-          )}
-        </div>
-
-        <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Net Worth Trend</p>
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="md:col-span-2 rounded-2xl bg-gray-900/70 border border-gray-800/80 p-4 md:p-6">
+          <p className="text-sm font-medium text-gray-400">Net Worth</p>
+          <p className="text-3xl sm:text-4xl font-bold tracking-tight text-white mt-1">₹{formatIndian(netWorth)}</p>
           {snapshots.length > 1 ? (
-            <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={snapshots}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-                <XAxis dataKey="date" tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={tooltipContent} formatter={(v) => [`₹${formatIndian(v)}`, 'Net Worth']} />
-                <Line type="monotone" dataKey="net_worth" stroke="#3b82f6" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
+            <div className="h-48 mt-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={snapshots} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+                  <Tooltip content={<NetWorthTooltip />} />
+                  <Line type="monotone" dataKey="net_worth" stroke="#3b82f6" strokeWidth={2.5} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           ) : (
-            <div className="h-48 flex items-center justify-center text-gray-600 text-sm">
-              {snapshots.length === 1 ? 'Add more snapshots to see a trend' : 'Add net worth entries in Returns page'}
+            <div className="h-48 mt-4 flex items-center justify-center text-sm text-gray-500">
+              Add entries on the Returns page to see a trend
             </div>
           )}
+        </div>
+        <div className="space-y-4">
+          <StatCard label="Total Assets" value={totalAssets + summary.totalInvested + totalUnrealizedPnl} />
+          <StatCard label="Total Liabilities" value={totalLiabilities} />
+          <StatCard label="Invested" value={summary.totalInvested} />
+          <StatCard label="Unrealized P&L" value={totalUnrealizedPnl} isPnl />
+          <StatCard label="Realized P&L" value={summary.totalRealizedPnl} isPnl />
+        </div>
+      </div>
+
+      <div className="rounded-2xl bg-gray-900/70 border border-gray-800/80 p-4 md:p-6">
+        <h2 className="text-lg font-semibold text-white mb-4">Top 10 Holdings</h2>
+        <div className="h-72">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={topHoldings} layout="vertical" margin={{ left: 10, right: 10, top: 10, bottom: 10 }}>
+              <XAxis type="number" hide />
+              <YAxis type="category" dataKey="symbol" width={70} tick={{ fill: '#a1a1aa', fontSize: 12 }} axisLine={false} tickLine={false} />
+              <Tooltip content={<HoldingsTooltip />} cursor={{ fill: 'rgba(161, 161, 170, 0.1)' }} />
+              <Bar dataKey="marketValue" radius={[0, 8, 8, 0]}>
+                {topHoldings.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#3b82f6' : '#6366f1'} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
       <div>
-        <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-3">Accounts</h2>
-        <div className="space-y-2">
-          {perAccount.map((acct) => (
-            <div key={acct.id} className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4 hover:border-gray-700/50 transition-colors">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                  <div className={`w-2.5 h-2.5 rounded-full ${Number(acct.balance) >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`} />
-                  <div>
-                    <p className="font-medium text-white">{acct.name}</p>
-                    <p className="text-xs text-gray-500 capitalize">{acct.type.replace('_', ' ')}</p>
-                  </div>
-                </div>
-                <p className={`font-semibold truncate max-w-[120px] ${Number(acct.balance) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  ₹{formatIndian(acct.balance)}
-                </p>
-              </div>
-              {(acct.invested !== 0 || acct.realizedPnl !== 0 || acct.unrealizedPnl !== 0) && (
-                <div className="flex gap-4 mt-2 pt-2 border-t border-gray-800/50 text-xs">
-                  <span className="text-gray-500">Invested: <span className="text-blue-400 font-medium">₹{formatIndian(acct.invested)}</span></span>
-                  {acct.unrealizedPnl !== 0 && (
-                    <span className="text-gray-500">Unrealized: <span className={`font-medium ${acct.unrealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {acct.unrealizedPnl >= 0 ? '+' : ''}₹{formatIndian(acct.unrealizedPnl)}
-                    </span></span>
-                  )}
-                  <span className="text-gray-500">P&L: <span className={`font-medium ${acct.realizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {acct.realizedPnl >= 0 ? '+' : ''}₹{formatIndian(acct.realizedPnl)}
-                  </span></span>
-                </div>
-              )}
-            </div>
-          ))}
-          {perAccount.length === 0 && (
-            <p className="text-center text-gray-500 text-sm py-4">No accounts with data</p>
-          )}
+        <h2 className="text-lg font-semibold text-white mb-4">Accounts</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {perAccountSummary.map(acct => <AccountCard key={acct.id} account={acct} />)}
         </div>
       </div>
     </div>
   )
 }
+
+// --- Sub-Components ---
+const StatCard = ({ label, value, isPnl = false }) => {
+  const color = isPnl ? (value >= 0 ? 'text-emerald-400' : 'text-red-400') : 'text-blue-400'
+  const sign = isPnl && value >= 0 ? '+' : ''
+  return (
+    <div className="rounded-2xl bg-gray-900/70 border border-gray-800/80 p-4">
+      <p className="text-sm font-medium text-gray-400">{label}</p>
+      <p className={clsx('text-2xl font-bold tracking-tight mt-1', color)}>
+        {sign}₹{formatIndian(value)}
+      </p>
+    </div>
+  )
+}
+
+const AccountCard = ({ account }) => (
+  <div className="rounded-xl bg-gray-900/70 border border-gray-800/80 p-4 flex flex-col h-full">
+    <div className="flex justify-between items-start">
+      <div>
+        <p className="font-semibold text-white">{account.name}</p>
+        <p className="text-sm text-gray-500 capitalize">{account.type.replace('_', ' ')}</p>
+      </div>
+      <p className={clsx('font-bold text-lg', Number(account.balance) >= 0 ? 'text-emerald-400' : 'text-red-400')}>
+        ₹{formatIndian(account.balance)}
+      </p>
+    </div>
+    <div className="space-y-2 pt-3 mt-3 border-t border-gray-800/80 text-sm">
+      <div className="flex justify-between">
+        <p className="text-gray-400">Invested</p>
+        <p className="font-medium text-blue-400">₹{formatIndian(account.invested)}</p>
+      </div>
+      <div className="flex justify-between">
+        <p className="text-gray-400">Unrealized P&L</p>
+        <p className={clsx('font-medium', account.unrealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400')}>
+          {account.unrealizedPnl >= 0 ? '+' : ''}₹{formatIndian(account.unrealizedPnl)}
+        </p>
+      </div>
+      <div className="flex justify-between">
+        <p className="text-gray-400">Realized P&L</p>
+        <p className={clsx('font-medium', account.realizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400')}>
+          {account.realizedPnl >= 0 ? '+' : ''}₹{formatIndian(account.realizedPnl)}
+        </p>
+      </div>
+    </div>
+  </div>
+)

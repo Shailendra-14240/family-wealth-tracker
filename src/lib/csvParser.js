@@ -87,12 +87,19 @@ function normaliseType(val, tradeTypeVal) {
 
 function normaliseSymbol(val) {
   if (!val) return ''
-  return val.toString()
+  let normalized = val.toString()
     .toUpperCase()
     .replace(/["']/g, '')
     .replace(/#/g, '')
     .replace(/\d+$/, '')
     .trim()
+
+  // Specific normalization for MOM100INAV to MOM
+  if (normalized === 'MOM100INAV') {
+    normalized = 'MOM'
+  }
+
+  return normalized
 }
 
 function parseValue(val) {

@@ -3,25 +3,27 @@ import { supabase } from '../lib/supabase'
 import { calculateHoldings } from '../lib/pnlCalc'
 import { formatIndian, isBondSymbol } from '../lib/format'
 import { fetchPrices } from '../lib/priceFeed'
+import clsx from 'clsx'
 
 export default function Holdings() {
   const [allTxns, setAllTxns] = useState([])
   const [allActions, setAllActions] = useState([])
   const [accounts, setAccounts] = useState([])
   const [currentPrices, setCurrentPrices] = useState({})
-  const [priceTs, setPriceTs] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  const [symbolFilter, setSymbolFilter] = useState('')
   const [accountFilter, setAccountFilter] = useState('')
-  const [currentOnly, setCurrentOnly] = useState(true)
-  const [sortBy, setSortBy] = useState('invested-desc')
+  const [showClosed, setShowClosed] = useState(false)
+  
+  // Sortable/Filterable table
+  const [sortBy, setSortBy] = useState('market_value')
+  const [sortAsc, setSortAsc] = useState(false)
+  const [activeFilterCol, setActiveFilterCol] = useState(null)
+  const [columnFilters, setColumnFilters] = useState({})
 
   useEffect(() => {
     if (!supabase) return
     Promise.all([
-      supabase.from('transactions').select('*').order('date').limit(1000000),
+      supabase.from('transactions').select('*').order('date'),
       supabase.from('corporate_actions').select('*'),
       supabase.from('accounts').select('id, name'),
     ]).then(([txnRes, actRes, acctRes]) => {
@@ -32,267 +34,239 @@ export default function Holdings() {
     })
   }, [])
 
-  const filtered = useMemo(() => {
-    let txns = allTxns
-    if (dateFrom) txns = txns.filter(t => t.date >= dateFrom)
-    if (dateTo) txns = txns.filter(t => t.date <= dateTo)
-    if (symbolFilter.trim()) {
-      const symbols = symbolFilter.toUpperCase().split(',').map(s => s.trim()).filter(Boolean)
-      if (symbols.length) txns = txns.filter(t => symbols.includes(t.symbol))
-    }
-    if (accountFilter) txns = txns.filter(t => t.account_id === Number(accountFilter))
-    return txns
-  }, [allTxns, dateFrom, dateTo, symbolFilter, accountFilter])
+  const filteredTxns = useMemo(() => {
+    return accountFilter ? allTxns.filter(t => t.account_id === Number(accountFilter)) : allTxns
+  }, [allTxns, accountFilter])
 
-  const holdings = useMemo(() => calculateHoldings(filtered, allActions), [filtered, allActions])
+  const holdings = useMemo(() => calculateHoldings(filteredTxns, allActions), [filteredTxns, allActions])
 
-  const { openPositions, closedPositions, symbolsToFetch } = useMemo(() => {
-    const open = []
-    const closed = []
-    const syms = new Set()
-    for (const h of holdings) {
-      if (h.qty > 0) {
-        open.push(h)
-        syms.add(h.symbol)
-      } else if (h.realizedPnl !== 0) {
-        closed.push(h)
-      }
-    }
-    return { openPositions: open, closedPositions: closed, symbolsToFetch: [...syms] }
-  }, [holdings])
+  const allOpenSymbols = useMemo(() => [...new Set(holdings.filter(h => h.qty > 0).map(h => h.symbol))], [holdings])
 
   useEffect(() => {
-    if (!symbolsToFetch.length) return
-    fetchPrices(symbolsToFetch).then(prices => {
-      setCurrentPrices(prices)
-      setPriceTs(Date.now())
-    })
-    const iv = setInterval(() => {
-      fetchPrices(symbolsToFetch).then(prices => {
-        setCurrentPrices(prices)
-        setPriceTs(Date.now())
-      })
-    }, 180000)
-    return () => clearInterval(iv)
-  }, [symbolsToFetch])
+    if (!allOpenSymbols.length) return
+    const fetch = () => fetchPrices(allOpenSymbols).then(setCurrentPrices)
+    fetch()
+    const interval = setInterval(fetch, 180000)
+    return () => clearInterval(interval)
+  }, [allOpenSymbols])
 
-  const enrichedOpen = useMemo(() => {
-    return openPositions.map(h => {
+  const processedHoldings = useMemo(() => {
+    return holdings.map(h => {
       const price = currentPrices[h.symbol]
-      const hasPrice = price != null && price > 0
-      const unrealizedPnl = hasPrice
-        ? Math.round((price - h.avgCost) * h.qty * 100) / 100
-        : null
-      return { ...h, currentPrice: hasPrice ? price : null, unrealizedPnl }
+      const marketValue = price > 0 ? price * h.qty : 0
+      const unrealizedPnl = h.qty > 0 && marketValue > 0 ? marketValue - h.invested : 0
+      return { ...h, marketValue, unrealizedPnl, currentPrice: price }
     })
-  }, [openPositions, currentPrices])
+  }, [holdings, currentPrices])
 
-  const SORT_OPTIONS = [
-    { value: 'invested-desc', label: 'Invested ↓' },
-    { value: 'invested-asc', label: 'Invested ↑' },
-    { value: 'pnl-desc', label: 'Unrealized P&L ↓' },
-    { value: 'pnl-asc', label: 'Unrealized P&L ↑' },
-    { value: 'realized-desc', label: 'Realized P&L ↓' },
-    { value: 'realized-asc', label: 'Realized P&L ↑' },
-    { value: 'ltp-desc', label: 'LTP ↓' },
-    { value: 'ltp-asc', label: 'LTP ↑' },
-    { value: 'diff-desc', label: 'LTP−Avg ↓' },
-    { value: 'diff-asc', label: 'LTP−Avg ↑' },
-    { value: 'symbol-asc', label: 'Symbol A→Z' },
-    { value: 'symbol-desc', label: 'Symbol Z→A' },
-  ]
+  const { openPositions, closedPositions } = useMemo(() => {
+    const open = processedHoldings.filter(h => h.qty > 0)
+    const closed = processedHoldings.filter(h => h.qty <= 0 && h.realizedPnl !== 0)
+    return { openPositions: open, closedPositions: closed }
+  }, [processedHoldings])
 
   const sortedPositions = useMemo(() => {
-    const sortFn = (a, b) => {
-      const [key, dir] = sortBy.split('-')
-      let va, vb
-      switch (key) {
-        case 'invested': va = a.invested; vb = b.invested; break
-        case 'pnl': va = a.unrealizedPnl ?? -Infinity; vb = b.unrealizedPnl ?? -Infinity; break
-        case 'realized': va = a.realizedPnl; vb = b.realizedPnl; break
-        case 'ltp': va = a.currentPrice ?? -Infinity; vb = b.currentPrice ?? -Infinity; break
-        case 'diff': va = (a.currentPrice ?? 0) - a.avgCost; vb = (b.currentPrice ?? 0) - b.avgCost; break
-        case 'symbol': return dir === 'asc' ? a.symbol.localeCompare(b.symbol) : b.symbol.localeCompare(a.symbol)
-        default: return 0
-      }
-      return dir === 'asc' ? va - vb : vb - va
+    let positions = showClosed ? closedPositions : openPositions
+    
+    // Apply column filters
+    if (columnFilters.symbol) {
+      positions = positions.filter(h => h.symbol.toUpperCase().includes(columnFilters.symbol.toUpperCase()))
     }
-    return [...enrichedOpen].sort(sortFn)
-  }, [enrichedOpen, sortBy])
-
-  const displayPositions = useMemo(() => {
-    return currentOnly ? enrichedOpen : [...enrichedOpen, ...closedPositions]
-  }, [currentOnly, enrichedOpen, closedPositions])
+    
+    // Sort
+    return [...positions].sort((a, b) => {
+      let aVal, bVal
+      switch(sortBy) {
+        case 'symbol': aVal = a.symbol; bVal = b.symbol; break
+        case 'qty': aVal = a.qty; bVal = b.qty; break
+        case 'invested': aVal = a.invested; bVal = b.invested; break
+        case 'avgCost': aVal = a.avgCost; bVal = b.avgCost; break
+        case 'market_value': aVal = a.marketValue; bVal = b.marketValue; break
+        case 'unrealized': aVal = a.unrealizedPnl; bVal = b.unrealizedPnl; break
+        case 'realized': aVal = a.realizedPnl; bVal = b.realizedPnl; break
+        default: aVal = a.marketValue; bVal = b.marketValue
+      }
+      if (typeof aVal === 'string') {
+        return sortAsc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
+      }
+      return sortAsc ? aVal - bVal : bVal - aVal
+    })
+  }, [openPositions, closedPositions, showClosed, sortBy, sortAsc, columnFilters])
 
   const summary = useMemo(() => {
-    const totalInvested = enrichedOpen.reduce((s, h) => s + h.invested, 0)
-    const totalRealizedPnl = holdings.reduce((s, h) => s + h.realizedPnl, 0)
-    const totalUnrealizedPnl = enrichedOpen.reduce((s, h) => s + (h.unrealizedPnl ?? 0), 0)
-    const missingPrices = enrichedOpen.filter(h => h.currentPrice == null && !isBondSymbol(h.symbol)).length
+    const pos = showClosed ? closedPositions : openPositions
     return {
-      totalInvested: Math.round(totalInvested * 100) / 100,
-      totalRealizedPnl: Math.round(totalRealizedPnl * 100) / 100,
-      totalUnrealizedPnl: Math.round(totalUnrealizedPnl * 100) / 100,
-      missingPrices,
+      invested: pos.reduce((sum, h) => sum + h.invested, 0),
+      marketValue: pos.reduce((sum, h) => sum + h.marketValue, 0),
+      realizedPnl: pos.reduce((sum, h) => sum + h.realizedPnl, 0),
+      unrealizedPnl: pos.reduce((sum, h) => sum + h.unrealizedPnl, 0),
     }
-  }, [enrichedOpen, holdings])
+  }, [openPositions, closedPositions, showClosed])
 
-  if (!supabase) return <p className="text-gray-500 text-center mt-10">Connect Supabase to see holdings</p>
-  if (loading) return <p className="text-gray-500 text-center mt-10">Loading...</p>
+  if (loading) return <p className="text-center text-gray-500 mt-10">Loading...</p>
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Filters</p>
-          <p className="text-xs text-gray-600">{filtered.length} txns</p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <FilterButton active={!showClosed} onClick={() => setShowClosed(false)}>Open</FilterButton>
+          <FilterButton active={showClosed} onClick={() => setShowClosed(true)}>Closed</FilterButton>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
-          <div>
-            <label className="text-[10px] text-gray-500 mb-1 block">From</label>
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-              className="w-full bg-gray-800/80 border border-gray-700/50 text-white rounded-lg px-2 py-1.5 text-xs" />
-          </div>
-          <div>
-            <label className="text-[10px] text-gray-500 mb-1 block">To</label>
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-              className="w-full bg-gray-800/80 border border-gray-700/50 text-white rounded-lg px-2 py-1.5 text-xs" />
-          </div>
-          <div>
-            <label className="text-[10px] text-gray-500 mb-1 block">Symbol</label>
-            <input type="text" placeholder="RELIANCE, TCS" value={symbolFilter}
-              onChange={e => setSymbolFilter(e.target.value)}
-              className="w-full bg-gray-800/80 border border-gray-700/50 text-white rounded-lg px-2 py-1.5 text-xs placeholder:text-gray-600" />
-          </div>
-          <div>
-            <label className="text-[10px] text-gray-500 mb-1 block">Account</label>
-            <select value={accountFilter} onChange={e => setAccountFilter(e.target.value)}
-              className="w-full bg-gray-800/80 border border-gray-700/50 text-white rounded-lg px-2 py-1.5 text-xs">
-              <option value="">All</option>
-              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-          </div>
+        <div className="flex items-center gap-2">
+          <select value={accountFilter} onChange={e => setAccountFilter(e.target.value)} className="input-base">
+            <option value="">All Accounts</option>
+            {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
         </div>
-        <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
-          <input type="checkbox" checked={currentOnly} onChange={e => setCurrentOnly(e.target.checked)}
-            className="accent-blue-500 w-3.5 h-3.5 rounded" />
-          Current holdings only
-        </label>
       </div>
 
-      <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider">Invested</p>
-            <p className="text-base sm:text-lg font-bold text-white mt-0.5">₹{formatIndian(summary.totalInvested)}</p>
-          </div>
-          <div className="text-center">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider">
-              Unrealized P&L
-              {priceTs && <span className="text-gray-600 ml-1 font-normal">•</span>}
-            </p>
-            <p className={`text-base sm:text-lg font-bold mt-0.5 ${summary.totalUnrealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {summary.totalUnrealizedPnl >= 0 ? '+' : ''}₹{formatIndian(summary.totalUnrealizedPnl)}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider">Realized P&L</p>
-            <p className={`text-base sm:text-lg font-bold mt-0.5 ${summary.totalRealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {summary.totalRealizedPnl >= 0 ? '+' : ''}₹{formatIndian(summary.totalRealizedPnl)}
-            </p>
-          </div>
+      <SummaryCard summary={summary} showClosed={showClosed} />
+
+      <div className="rounded-xl bg-gray-900/70 border border-gray-800/80 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-gray-900 text-xs text-gray-400 uppercase tracking-wider">
+              <tr>
+                {/* Symbol */}
+                <th 
+                  scope="col" 
+                  onClick={() => { setSortBy('symbol'); setSortAsc(!sortAsc) }}
+                  className="px-4 py-3 cursor-pointer hover:bg-gray-800/50 transition"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Symbol {sortBy === 'symbol' && (sortAsc ? '▲' : '▼')}</span>
+                  </div>
+                  {activeFilterCol === 'symbol' && (
+                    <input
+                      type="text"
+                      placeholder="Filter..."
+                      value={columnFilters.symbol || ''}
+                      onChange={(e) => setColumnFilters({...columnFilters, symbol: e.target.value})}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-full mt-1 px-2 py-1 text-xs bg-gray-700 text-white rounded border border-gray-600"
+                      autoFocus
+                    />
+                  )}
+                </th>
+                
+                {/* Qty */}
+                <th 
+                  scope="col" 
+                  onClick={() => { setSortBy('qty'); setSortAsc(!sortAsc) }}
+                  className="px-4 py-3 text-right cursor-pointer hover:bg-gray-800/50 transition"
+                >
+                  <span>Qty {sortBy === 'qty' && (sortAsc ? '▲' : '▼')}</span>
+                </th>
+                
+                {/* Avg Cost */}
+                <th 
+                  scope="col" 
+                  onClick={() => { setSortBy('avgCost'); setSortAsc(!sortAsc) }}
+                  className="px-4 py-3 text-right cursor-pointer hover:bg-gray-800/50 transition"
+                >
+                  <span>Avg. Cost {sortBy === 'avgCost' && (sortAsc ? '▲' : '▼')}</span>
+                </th>
+                
+                {/* LTP */}
+                {!showClosed && (
+                  <th scope="col" className="px-4 py-3 text-right">LTP</th>
+                )}
+                
+                {/* Invested */}
+                <th 
+                  scope="col" 
+                  onClick={() => { setSortBy('invested'); setSortAsc(!sortAsc) }}
+                  className="px-4 py-3 text-right cursor-pointer hover:bg-gray-800/50 transition"
+                >
+                  <span>Invested {sortBy === 'invested' && (sortAsc ? '▲' : '▼')}</span>
+                </th>
+                
+                {/* Market Value */}
+                {!showClosed && (
+                  <th 
+                    scope="col" 
+                    onClick={() => { setSortBy('market_value'); setSortAsc(!sortAsc) }}
+                    className="px-4 py-3 text-right cursor-pointer hover:bg-gray-800/50 transition"
+                  >
+                    <span>Market Value {sortBy === 'market_value' && (sortAsc ? '▲' : '▼')}</span>
+                  </th>
+                )}
+
+                {/* P&L */}
+                <th 
+                  scope="col" 
+                  onClick={() => { setSortBy(showClosed ? 'realized' : 'unrealized'); setSortAsc(!sortAsc) }}
+                  className="px-4 py-3 text-right cursor-pointer hover:bg-gray-800/50 transition"
+                >
+                  <span>{showClosed ? 'Realized' : 'Unrealized'} P&L {(sortBy === 'realized' || sortBy === 'unrealized') && (sortAsc ? '▲' : '▼')}</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedPositions.map(h => <HoldingRow key={h.symbol} holding={h} isClosed={showClosed} />)}
+            </tbody>
+          </table>
         </div>
-        {priceTs && (
-          <p className="text-[10px] text-gray-600 mt-1.5">
-            Live prices from Yahoo Finance — refreshes every 3 min
-            {summary.missingPrices > 0 && <span className="text-yellow-600 ml-2">{summary.missingPrices} symbol(s) not found</span>}
-          </p>
+        {sortedPositions.length === 0 && (
+          <p className="text-center text-gray-500 py-10">No {showClosed ? 'closed' : 'open'} positions.</p>
         )}
       </div>
-
-      {enrichedOpen.length > 0 && (
-        <>
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Open Positions</h2>
-            <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-              className="bg-gray-800/80 border border-gray-700/50 text-white rounded-lg px-2 py-1 text-[10px]">
-              {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {sortedPositions.map((h) => (
-              <div key={h.symbol} className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3 hover:border-gray-700/50 transition-colors">
-                <div className="flex justify-between items-center mb-1.5">
-                  <p className="font-semibold text-sm text-white">{h.symbol}</p>
-                  <span className="text-[10px] text-gray-400">{formatIndian(h.qty)} shares</span>
-                </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-gray-400">Avg ₹{formatIndian(h.avgCost)}</span>
-                  <span className="text-white font-medium">₹{formatIndian(h.invested)}</span>
-                </div>
-                {h.currentPrice != null && (
-                  <div className="flex justify-between items-center text-[10px] mt-0.5">
-                    <span className="text-gray-500">LTP ₹{formatIndian(h.currentPrice)}</span>
-                    <span className={`font-medium ${h.currentPrice >= h.avgCost ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {h.currentPrice >= h.avgCost ? '+' : ''}{(h.currentPrice - h.avgCost).toFixed(1)}
-                    </span>
-                  </div>
-                )}
-                {h.currentPrice == null && priceTs && !isBondSymbol(h.symbol) && (
-                  <div className="text-[10px] text-gray-600 mt-0.5">LTP N/A</div>
-                )}
-                {isBondSymbol(h.symbol) && (
-                  <div className="text-[10px] text-gray-600 mt-0.5">Bond — no live price</div>
-                )}
-                <div className="grid grid-cols-2 gap-1 mt-0.5 text-[10px] pt-1 border-t border-gray-800/50">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Unrealized</span>
-                    <span className={`font-medium ${h.unrealizedPnl != null && h.unrealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {h.unrealizedPnl != null ? `${h.unrealizedPnl >= 0 ? '+' : ''}₹${formatIndian(h.unrealizedPnl)}` : 'N/A'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Realized</span>
-                    <span className={`font-medium ${h.realizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {h.realizedPnl >= 0 ? '+' : ''}₹{formatIndian(h.realizedPnl)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      {closedPositions.length > 0 && !currentOnly && (
-        <>
-          <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider mt-4">Closed Positions</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {closedPositions.map((h) => (
-              <div key={h.symbol} className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3 opacity-80 hover:opacity-100 transition-opacity">
-                <div className="flex justify-between items-center mb-1.5">
-                  <p className="font-semibold text-sm text-gray-300">{h.symbol}</p>
-                  <span className="text-[10px] text-gray-600">Closed</span>
-                </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-gray-500">Avg ₹{formatIndian(h.avgCost)}</span>
-                  <span className="text-gray-500">₹{formatIndian(h.invested)}</span>
-                </div>
-                <div className="flex justify-between items-center text-xs mt-0.5">
-                  <span className="text-gray-500">Realized P&L</span>
-                  <span className={`font-medium ${h.realizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {h.realizedPnl >= 0 ? '+' : ''}₹{formatIndian(h.realizedPnl)}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      {displayPositions.length === 0 && (
-        <p className="text-gray-500 text-center py-10 text-sm">No holdings match the current filters.</p>
-      )}
     </div>
   )
 }
+
+const FilterButton = ({ active, onClick, children }) => (
+  <button onClick={onClick} className={clsx(
+    'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+    active ? 'bg-primary-500 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+  )}>
+    {children}
+  </button>
+)
+
+const SummaryCard = ({ summary, showClosed }) => (
+  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+    <Stat label="Invested" value={summary.invested} />
+    {!showClosed && <Stat label="Market Value" value={summary.marketValue} />}
+    <Stat label={showClosed ? "Total Realized" : "Total Unrealized"} value={showClosed ? summary.realizedPnl : summary.unrealizedPnl} isPnl />
+    {showClosed && <Stat label="From Closed" value={summary.invested} />}
+  </div>
+)
+
+const Stat = ({ label, value, isPnl = false }) => {
+  const color = isPnl ? (value >= 0 ? 'text-emerald-400' : 'text-red-400') : 'text-white'
+  return (
+    <div className="rounded-xl bg-gray-900/70 border border-gray-800/80 p-4">
+      <p className="text-xs text-gray-500 uppercase tracking-wider">{label}</p>
+      <p className={clsx('text-lg font-bold mt-1', color)}>
+        {isPnl && value > 0 ? '+' : ''}₹{formatIndian(value)}
+      </p>
+    </div>
+  )
+}
+
+const HoldingRow = ({ holding: h, isClosed }) => (
+  <tr className="border-b border-gray-800/80 hover:bg-gray-800/50 transition-colors">
+    <th scope="row" className="px-4 py-3 font-medium text-white whitespace-nowrap">{h.symbol}</th>
+    <td className="px-4 py-3 text-right">{formatIndian(h.qty)}</td>
+    <td className="px-4 py-3 text-right">₹{formatIndian(h.avgCost)}</td>
+    {!isClosed && (
+      <td className="px-4 py-3 text-right">
+        {h.currentPrice > 0 ? `₹${formatIndian(h.currentPrice)}` : <span className="text-gray-500">N/A</span>}
+      </td>
+    )}
+    <td className="px-4 py-3 text-right">₹{formatIndian(h.invested)}</td>
+    {!isClosed && (
+      <td className="px-4 py-3 text-right">
+        {h.marketValue > 0 ? `₹${formatIndian(h.marketValue)}` : <span className="text-gray-500">N/A</span>}
+      </td>
+    )}
+    <td className={clsx('px-4 py-3 text-right font-medium', isClosed || h.unrealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400')}>
+      {isClosed ? (
+        `${h.realizedPnl >= 0 ? '+' : ''}₹${formatIndian(h.realizedPnl)}`
+      ) : (
+        h.marketValue > 0 ? `${h.unrealizedPnl >= 0 ? '+' : ''}₹${formatIndian(h.unrealizedPnl)}` : <span className="text-gray-500">N/A</span>
+      )}
+    </td>
+  </tr>
+)

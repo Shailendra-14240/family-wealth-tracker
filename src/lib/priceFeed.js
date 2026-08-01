@@ -1,4 +1,5 @@
 import { isBondSymbol } from './format'
+// Removed: import { normalizeSymbolForPnl } from './pnlCalc'
 
 const CACHE_KEY = 'live_prices'
 const CACHE_TTL = 300000
@@ -20,6 +21,7 @@ function saveCache(data) {
 }
 
 export async function fetchPrices(symbols) {
+  // Reverted to original: no normalization here
   const stocks = [...new Set(symbols.map(s => s.trim().toUpperCase()))].filter(s => s && !isBondSymbol(s))
   const cached = loadCache()
 

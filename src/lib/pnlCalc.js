@@ -1,10 +1,25 @@
 // FIFO P&L calculation engine with corporate actions (bonus, split, merger, demerger)
+// Removed import { isFOSymbol } from './format'
+
+function normalizeSymbolForPnl(symbol) {
+  if (symbol === 'MOM100INAV') {
+    return 'MOM'
+  }
+  return symbol
+}
 
 export function calculateHoldings(transactions, corporateActions = []) {
   if (!transactions.length) return []
-  const allTxns = [...transactions]
+
+  // Normalize symbols for all transactions at the start
+  const allTxns = transactions.map(t => ({ ...t, symbol: normalizeSymbolForPnl(t.symbol) }))
+
   const mergers = (corporateActions || []).filter(a => a.action === 'merger')
   for (const m of mergers) {
+    // Normalize merger symbols
+    m.symbol = normalizeSymbolForPnl(m.symbol)
+    m.new_symbol = normalizeSymbolForPnl(m.new_symbol)
+
     const mergeDate = new Date(m.date).getTime()
     for (const t of allTxns) {
       if (t.symbol === m.symbol && new Date(t.date).getTime() < mergeDate) {
@@ -19,6 +34,10 @@ export function calculateHoldings(transactions, corporateActions = []) {
   const demergerMap = {}
   for (const a of (corporateActions || [])) {
     if (a.action === 'demerger') {
+      // Normalize demerger symbols
+      a.symbol = normalizeSymbolForPnl(a.symbol)
+      a.new_symbol = normalizeSymbolForPnl(a.new_symbol)
+
       const key = `${a.date}|${a.symbol}`
       if (!demergerMap[key]) demergerMap[key] = { date: a.date, symbol: a.symbol, children: [] }
       demergerMap[key].children.push(a)
@@ -89,6 +108,7 @@ export function calculateHoldings(transactions, corporateActions = []) {
       avgCost: Math.round(avgCost * 100) / 100,
       invested: Math.round(invested * 100) / 100,
       realizedPnl: Math.round((realizedPnl[symbol] || 0) * 100) / 100,
+      // Removed assetType: isFOSymbol(symbol) ? 'fo' : 'equity',
     })
   }
 
@@ -98,18 +118,26 @@ export function calculateHoldings(transactions, corporateActions = []) {
 export function calculateSummary(holdings) {
   const totalInvested = holdings.reduce((s, h) => s + h.invested, 0)
   const totalRealizedPnl = holdings.reduce((s, h) => s + h.realizedPnl, 0)
+
   return {
     totalInvested: Math.round(totalInvested * 100) / 100,
     totalRealizedPnl: Math.round(totalRealizedPnl * 100) / 100,
+    // Removed equity and fo summaries
   }
 }
 
 export function calculateLotWisePnl(transactions, corporateActions = []) {
   if (!transactions.length) return []
-  const allTxns = [...transactions]
+
+  // Normalize symbols for all transactions at the start
+  const allTxns = transactions.map(t => ({ ...t, symbol: normalizeSymbolForPnl(t.symbol) }))
 
   const mergers = (corporateActions || []).filter(a => a.action === 'merger')
   for (const m of mergers) {
+    // Normalize merger symbols
+    m.symbol = normalizeSymbolForPnl(m.symbol)
+    m.new_symbol = normalizeSymbolForPnl(m.new_symbol)
+
     const mergeDate = new Date(m.date).getTime()
     for (const t of allTxns) {
       if (t.symbol === m.symbol && new Date(t.date).getTime() < mergeDate) {
@@ -124,6 +152,10 @@ export function calculateLotWisePnl(transactions, corporateActions = []) {
   const demergerMap = {}
   for (const a of (corporateActions || [])) {
     if (a.action === 'demerger') {
+      // Normalize demerger symbols
+      a.symbol = normalizeSymbolForPnl(a.symbol)
+      a.new_symbol = normalizeSymbolForPnl(a.new_symbol)
+
       const key = `${a.date}|${a.symbol}`
       if (!demergerMap[key]) demergerMap[key] = { date: a.date, symbol: a.symbol, children: [] }
       demergerMap[key].children.push(a)
@@ -132,7 +164,7 @@ export function calculateLotWisePnl(transactions, corporateActions = []) {
 
   const demergerTargetSymbols = new Set()
   for (const evt of Object.values(demergerMap)) {
-    for (const child of evt.children) demergerTargetSymbols.add(child.new_symbol)
+    for (const child of evt.children) demergerTargetSymbols.add(normalizeSymbolForPnl(child.new_symbol))
   }
 
   const allSymbols = [...new Set([...allTxns.map(t => t.symbol), ...demergerTargetSymbols])]
@@ -215,12 +247,13 @@ export function calculateLotWisePnl(transactions, corporateActions = []) {
           const cqty = childQtys[child.new_symbol]
           if (cqty > 0) {
             const cprice = costPerWeight * childWeights[child.new_symbol] / cqty
-            if (!lots[child.new_symbol]) {
-              lots[child.new_symbol] = []
-              lotRecords[child.new_symbol] = []
+            const normalizedChildSymbol = normalizeSymbolForPnl(child.new_symbol); // Normalize here
+            if (!lots[normalizedChildSymbol]) {
+              lots[normalizedChildSymbol] = []
+              lotRecords[normalizedChildSymbol] = []
             }
-            lots[child.new_symbol].push({ qty: cqty, price: cprice, buyDate: lot.buyDate })
-            lotRecords[child.new_symbol].push({
+            lots[normalizedChildSymbol].push({ qty: cqty, price: cprice, buyDate: lot.buyDate })
+            lotRecords[normalizedChildSymbol].push({
               buyDate: lot.buyDate,
               buyQty: cqty,
               buyPrice: cprice,
@@ -261,11 +294,16 @@ export function calculateLotWisePnl(transactions, corporateActions = []) {
         lots: records.map(r => ({
           buyDate: r.buyDate,
           buyQty: r.buyQty,
-          buyPrice: r.buyPrice,
+          buyPrice: r.buyQty > 0 ? r.buyValue / r.buyQty : 0,
           originalQty: r.originalQty,
-          sells: r.sells,
           remainingQty: r.remainingQty != null ? r.remainingQty : r.buyQty,
-          sellTotalPnl: r.sells.reduce((s, s2) => s + s2.pnl, 0),
+          sells: Object.values(r.sells).map(s => ({
+            date: s.date,
+            qty: s.qty,
+            price: s.qty > 0 ? s.value / s.qty : 0,
+            pnl: s.pnl,
+          })).sort((a, b) => a.date.localeCompare(b.date)),
+          sellTotalPnl: Object.values(r.sells).reduce((s, s2) => s + s2.pnl, 0),
         })),
       }
     })
@@ -320,16 +358,19 @@ function buildEvents(allTxns, corporateActions, demergerMap) {
   }
   const processed = new Set()
   for (const a of (corporateActions || [])) {
-    if (a.action === 'merger') continue
-    if (a.action === 'demerger') {
-      const key = `${a.date}|${a.symbol}`
+    // Normalize corporate action symbols before processing
+    const normalizedAction = { ...a, symbol: normalizeSymbolForPnl(a.symbol), new_symbol: normalizeSymbolForPnl(a.new_symbol) };
+
+    if (normalizedAction.action === 'merger') continue
+    if (normalizedAction.action === 'demerger') {
+      const key = `${normalizedAction.date}|${normalizedAction.symbol}`
       if (demergerMap[key] && !processed.has(key)) {
-        events.push({ type: 'demerger', date: a.date, symbol: a.symbol, children: demergerMap[key].children, _idx: null })
+        events.push({ type: 'demerger', date: normalizedAction.date, symbol: normalizedAction.symbol, children: demergerMap[key].children, _idx: null })
         processed.add(key)
       }
       continue
     }
-    events.push({ type: a.action, date: a.date, symbol: a.symbol, ratio_from: Number(a.ratio_from), ratio_to: Number(a.ratio_to), _idx: null })
+    events.push({ type: normalizedAction.action, date: normalizedAction.date, symbol: normalizedAction.symbol, ratio_from: Number(normalizedAction.ratio_from), ratio_to: Number(normalizedAction.ratio_to), _idx: null })
   }
   events.sort((a, b) => {
     const da = new Date(a.date), db = new Date(b.date)
@@ -348,7 +389,7 @@ function processDemerger(lots, symbol, children) {
   const retainedRatio = Number(children[0].retained_ratio != null ? children[0].retained_ratio : ratioFrom)
   const hasCostShare = children.some(c => c.cost_share != null)
   const newLotsToAdd = {}
-  for (const child of children) newLotsToAdd[child.new_symbol] = []
+  for (const child of children) newLotsToAdd[normalizeSymbolForPnl(child.new_symbol)] = [] // Normalize here
 
   for (const lot of oldLots) {
     const oldQty = lot.qty
@@ -359,9 +400,9 @@ function processDemerger(lots, symbol, children) {
     const childWeights = {}
     for (const child of children) {
       const cqty = oldQty * Number(child.ratio_to) / ratioFrom
-      childQtys[child.new_symbol] = cqty
+      childQtys[normalizeSymbolForPnl(child.new_symbol)] = cqty // Normalize here
       const w = hasCostShare ? Number(child.cost_share) : Number(child.ratio_to)
-      childWeights[child.new_symbol] = w
+      childWeights[normalizeSymbolForPnl(child.new_symbol)] = w // Normalize here
       totalWeight += w
     }
     const retainedQty = oldQty * retainedRatio / ratioFrom
@@ -371,9 +412,9 @@ function processDemerger(lots, symbol, children) {
     lot.price = retainedQty > 0 ? costPerWeight * retainedRatio / retainedQty : 0
 
     for (const child of children) {
-      const cqty = childQtys[child.new_symbol]
+      const cqty = childQtys[normalizeSymbolForPnl(child.new_symbol)] // Normalize here
       if (cqty > 0) {
-        newLotsToAdd[child.new_symbol].push({ qty: cqty, price: costPerWeight * childWeights[child.new_symbol] / cqty })
+        newLotsToAdd[normalizeSymbolForPnl(child.new_symbol)].push({ qty: cqty, price: costPerWeight * childWeights[normalizeSymbolForPnl(child.new_symbol)] / cqty }) // Normalize here
       }
     }
   }

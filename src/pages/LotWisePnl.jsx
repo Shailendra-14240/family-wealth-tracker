@@ -2,205 +2,161 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { calculateLotWisePnl, consolidateLotRecords } from '../lib/pnlCalc'
 import { formatIndian } from '../lib/format'
+import clsx from 'clsx'
 
 export default function LotWisePnl() {
   const [transactions, setTransactions] = useState([])
   const [corpActions, setCorpActions] = useState([])
-  const [accounts, setAccounts] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filterSymbol, setFilterSymbol] = useState('')
-  const [filterAccount, setFilterAccount] = useState('')
-  const [filterDateFrom, setFilterDateFrom] = useState('')
-  const [filterDateTo, setFilterDateTo] = useState('')
-  const [showClosedOnly, setShowClosedOnly] = useState(false)
+  const [selectedSymbol, setSelectedSymbol] = useState(null)
   const [doConsolidate, setDoConsolidate] = useState(true)
-  const [sortBy, setSortBy] = useState('symbol-asc')
 
   useEffect(() => {
     if (!supabase) return
     Promise.all([
-      supabase.from('transactions').select('*').order('date'),
+      supabase.from('transactions').select('symbol, date, type, qty, price, account_id'),
       supabase.from('corporate_actions').select('*'),
-      supabase.from('accounts').select('id, name').order('name'),
-    ]).then(([txRes, caRes, acctRes]) => {
+    ]).then(([txRes, caRes]) => {
       if (txRes.data) setTransactions(txRes.data)
       if (caRes.data) setCorpActions(caRes.data)
-      if (acctRes.data) setAccounts(acctRes.data)
       setLoading(false)
     })
   }, [])
 
-  const txnsForAccount = useMemo(() => {
-    if (!filterAccount) return transactions
-    return transactions.filter(t => Number(t.account_id) === Number(filterAccount))
-  }, [transactions, filterAccount])
+  const uniqueSymbols = useMemo(() => {
+    const symbols = new Set(transactions.map(t => t.symbol))
+    return Array.from(symbols).sort()
+  }, [transactions])
 
   const pnlData = useMemo(() => {
-    if (!txnsForAccount.length) return []
-    const raw = calculateLotWisePnl(txnsForAccount, corpActions)
+    if (!selectedSymbol) return null
+    const symbolTxns = transactions.filter(t => t.symbol === selectedSymbol)
+    const raw = calculateLotWisePnl(symbolTxns, corpActions)
     return doConsolidate ? consolidateLotRecords(raw) : raw
-  }, [txnsForAccount, corpActions, doConsolidate])
+  }, [selectedSymbol, transactions, corpActions, doConsolidate])
 
-  const symbols = useMemo(() => pnlData.map(d => d.symbol).sort(), [pnlData])
+  if (loading) return <p className="text-center text-gray-500 mt-10">Loading...</p>
 
-  const LOT_SORT_OPTIONS = [
-    { value: 'symbol-asc', label: 'Symbol A→Z' },
-    { value: 'symbol-desc', label: 'Symbol Z→A' },
-    { value: 'pnl-desc', label: 'P&L ↓' },
-    { value: 'pnl-asc', label: 'P&L ↑' },
-    { value: 'buy-desc', label: 'Buy Value ↓' },
-    { value: 'buy-asc', label: 'Buy Value ↑' },
-    { value: 'sell-desc', label: 'Sell Value ↓' },
-    { value: 'sell-asc', label: 'Sell Value ↑' },
-    { value: 'qty-desc', label: 'Remaining ↓' },
-    { value: 'qty-asc', label: 'Remaining ↑' },
-  ]
-
-  const filtered = useMemo(() => {
-    let data = pnlData.slice()
-    if (filterSymbol) data = data.filter(d => d.symbol === filterSymbol)
-    if (showClosedOnly) data = data.filter(d => d.lots.every(l => l.remainingQty === 0))
-    data = data.map(group => ({
-      ...group,
-      lots: group.lots.filter(l => {
-        if (filterDateFrom && l.buyDate < filterDateFrom) return false
-        if (filterDateTo && l.buyDate > filterDateTo) return false
-        return true
-      }),
-    })).filter(g => g.lots.length > 0)
-
-    const [key, dir] = sortBy.split('-')
-    data.sort((a, b) => {
-      let va, vb
-      switch (key) {
-        case 'symbol': return dir === 'asc' ? a.symbol.localeCompare(b.symbol) : b.symbol.localeCompare(a.symbol)
-        case 'pnl': va = a.lots.reduce((s, l) => s + l.sellTotalPnl, 0); vb = b.lots.reduce((s, l) => s + l.sellTotalPnl, 0); break
-        case 'buy': va = a.lots.reduce((s, l) => s + l.buyQty * l.buyPrice, 0); vb = b.lots.reduce((s, l) => s + l.buyQty * l.buyPrice, 0); break
-        case 'sell': va = a.lots.reduce((s, l) => s + l.sells.reduce((s2, sl) => s2 + sl.qty * sl.price, 0), 0); vb = b.lots.reduce((s, l) => s + l.sells.reduce((s2, sl) => s2 + sl.qty * sl.price, 0), 0); break
-        case 'qty': va = a.lots.reduce((s, l) => s + l.remainingQty, 0); vb = b.lots.reduce((s, l) => s + l.remainingQty, 0); break
-        default: return 0
-      }
-      return dir === 'asc' ? va - vb : vb - va
-    })
-    return data
-  }, [pnlData, filterSymbol, filterDateFrom, filterDateTo, showClosedOnly, sortBy])
-
-  if (!supabase) return <p className="text-gray-500 text-center mt-10">Connect Supabase</p>
-  if (loading) return <p className="text-gray-500 text-center mt-10">Loading...</p>
+  if (!selectedSymbol) {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold text-white">Select a Symbol</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          {uniqueSymbols.map(symbol => (
+            <button
+              key={symbol}
+              onClick={() => setSelectedSymbol(symbol)}
+              className="p-4 rounded-xl bg-gray-900/70 border border-gray-800/80 text-white font-semibold text-center hover:bg-gray-800/50 hover:border-gray-700/50 transition-colors"
+            >
+              {symbol}
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
-      <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Lot-wise P&L</h2>
-
-      <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-3 flex flex-wrap gap-2">
-        <select className="bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm" value={filterAccount} onChange={e => setFilterAccount(e.target.value)}>
-          <option value="">All Accounts</option>
-          {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-        </select>
-        <select className="bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm" value={filterSymbol} onChange={e => setFilterSymbol(e.target.value)}>
-          <option value="">All Symbols</option>
-          {symbols.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <input type="date" className="bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} placeholder="From" />
-        <input type="date" className="bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} placeholder="To" />
-        <label className="flex items-center gap-1 text-sm text-gray-400">
-          <input type="checkbox" className="accent-blue-500 w-4 h-4 rounded" checked={showClosedOnly} onChange={e => setShowClosedOnly(e.target.checked)} />
-          Closed only
+      <div className="flex items-center justify-between">
+        <button onClick={() => setSelectedSymbol(null)} className="text-primary-400 hover:text-primary-300 font-medium">
+          &larr; Back to Symbols
+        </button>
+        <label className="flex items-center gap-2 text-sm text-gray-400">
+          <input
+            type="checkbox"
+            className="accent-primary-500 w-4 h-4 rounded"
+            checked={doConsolidate}
+            onChange={e => setDoConsolidate(e.target.checked)}
+          />
+          Group by Date
         </label>
-        <label className="flex items-center gap-1 text-sm text-gray-400">
-          <input type="checkbox" className="accent-blue-500 w-4 h-4 rounded" checked={doConsolidate} onChange={e => setDoConsolidate(e.target.checked)} />
-          Group by date
-        </label>
-        <select className="bg-gray-800/80 text-white border border-gray-700/50 rounded-lg px-3 py-2 text-sm" value={sortBy} onChange={e => setSortBy(e.target.value)}>
-          {LOT_SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
       </div>
 
-      <div className="space-y-4">
-        {filtered.map(group => (
-          <div key={group.symbol} className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
-            <h3 className="font-bold text-blue-400 mb-2">{group.symbol}</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-gray-300">
-                <thead>
-                  <tr className="text-gray-500 text-xs uppercase tracking-wider font-medium border-b border-gray-800/50">
-                    <th className="text-left py-2 pr-3">Buy Date</th>
-                    <th className="text-right py-2 px-3">Buy Qty</th>
-                    <th className="text-right py-2 px-3">Buy Price</th>
-                    <th className="text-right py-2 px-3">Buy Value</th>
-                    <th className="text-left py-2 px-3">Sell Date</th>
-                    <th className="text-right py-2 px-3">Sell Qty</th>
-                    <th className="text-right py-2 px-3">Sell Price</th>
-                    <th className="text-right py-2 px-3">Sell Value</th>
-                    <th className="text-right py-2 px-3">P&L</th>
-                    <th className="text-right py-2 pl-3">Rem Qty</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {group.lots.map((lot, i) => {
-                    const rows = []
-                    const buyValue = lot.buyQty * lot.buyPrice
-                    if (lot.sells.length === 0) {
-                      rows.push(
-                        <tr key={`${i}-open`} className="border-b border-gray-800/50">
-                          <td className="py-2 pr-3 text-gray-400">{lot.buyDate}</td>
-                          <td className="text-right py-2 px-3">{formatIndian(lot.buyQty)}</td>
-                          <td className="text-right py-2 px-3">{formatIndian(lot.buyPrice)}</td>
-                          <td className="text-right py-2 px-3">{formatIndian(buyValue)}</td>
-                          <td className="py-2 px-3 text-gray-600">--</td>
-                          <td className="text-right py-2 px-3">--</td>
-                          <td className="text-right py-2 px-3">--</td>
-                          <td className="text-right py-2 px-3">--</td>
-                          <td className="text-right py-2 px-3 text-gray-600">--</td>
-                          <td className="text-right py-2 pl-3 text-yellow-400">{formatIndian(lot.remainingQty)}</td>
-                        </tr>
-                      )
-                    } else {
-                      lot.sells.forEach((sell, j) => {
-                        const sellValue = sell.qty * sell.price
-                        rows.push(
-                          <tr key={`${i}-${j}`} className="border-b border-gray-800/50">
-                            <td className="py-2 pr-3 text-gray-400">{j === 0 ? lot.buyDate : ''}</td>
-                            <td className="text-right py-2 px-3">{j === 0 ? formatIndian(lot.buyQty) : ''}</td>
-                            <td className="text-right py-2 px-3">{j === 0 ? formatIndian(lot.buyPrice) : ''}</td>
-                            <td className="text-right py-2 px-3">{j === 0 ? formatIndian(buyValue) : ''}</td>
-                            <td className="py-2 px-3 text-gray-400">{sell.date}</td>
-                            <td className="text-right py-2 px-3">{formatIndian(sell.qty)}</td>
-                            <td className="text-right py-2 px-3">{formatIndian(sell.price)}</td>
-                            <td className="text-right py-2 px-3">{formatIndian(sellValue)}</td>
-                            <td className={`text-right py-2 px-3 font-medium ${sell.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                              {sell.pnl >= 0 ? '+' : ''}{formatIndian(sell.pnl)}
-                            </td>
-                            <td className="text-right py-2 pl-3">{j === lot.sells.length - 1 ? formatIndian(lot.remainingQty) : ''}</td>
-                          </tr>
-                        )
-                      })
-                    }
-                    return rows
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr className="text-gray-300 font-medium border-t border-gray-700/50">
-                    <td className="py-2 pr-3">Total</td>
-                    <td></td>
-                    <td></td>
-                    <td className="text-right px-3">{formatIndian(group.lots.reduce((s, l) => s + l.buyQty * l.buyPrice, 0))}</td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td className="text-right px-3">{formatIndian(group.lots.reduce((s, l) => s + l.sells.reduce((s2, sl) => s2 + sl.qty * sl.price, 0), 0))}</td>
-                    <td className={`text-right px-3 font-semibold ${group.lots.reduce((s, l) => s + l.sellTotalPnl, 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {group.lots.reduce((s, l) => s + l.sellTotalPnl, 0) >= 0 ? '+' : ''}{formatIndian(group.lots.reduce((s, l) => s + l.sellTotalPnl, 0))}
-                    </td>
-                    <td className="text-right pl-3">{formatIndian(group.lots.reduce((s, l) => s + l.remainingQty, 0))}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+      {pnlData && pnlData.map(group => (
+        <div key={group.symbol} className="rounded-xl bg-gray-900/70 border border-gray-800/80 p-4">
+          <h3 className="font-bold text-xl text-primary-400 mb-3">{group.symbol}</h3>
+          <div className="overflow-x-auto">
+            <LotPnlTable lots={group.lots} />
           </div>
-        ))}
-        {filtered.length === 0 && <p className="text-gray-500 text-center py-10">No data matching filters.</p>}
-      </div>
+        </div>
+      ))}
     </div>
   )
+}
+
+const LotPnlTable = ({ lots }) => {
+  const totals = useMemo(() => {
+    return {
+      buyValue: lots.reduce((s, l) => s + l.buyQty * l.buyPrice, 0),
+      sellValue: lots.reduce((s, l) => s + l.sells.reduce((s2, sl) => s2 + sl.qty * sl.price, 0), 0),
+      totalPnl: lots.reduce((s, l) => s + l.sellTotalPnl, 0),
+      remainingQty: lots.reduce((s, l) => s + l.remainingQty, 0),
+    }
+  }, [lots])
+
+  return (
+    <table className="w-full text-sm text-gray-300">
+      <thead>
+        <tr className="text-gray-500 text-xs uppercase tracking-wider font-medium border-b border-gray-800/50">
+          <th className="text-left py-2 pr-3">Buy Date</th>
+          <th className="text-right py-2 px-3">Buy Qty</th>
+          <th className="text-right py-2 px-3">Buy Price</th>
+          <th className="text-left py-2 px-3">Sell Date</th>
+          <th className="text-right py-2 px-3">Sell Qty</th>
+          <th className="text-right py-2 px-3">Sell Price</th>
+          <th className="text-right py-2 px-3">P&L</th>
+          <th className="text-right py-2 pl-3">Rem. Qty</th>
+        </tr>
+      </thead>
+      <tbody>
+        {lots.map((lot, i) => <LotRow key={i} lot={lot} />)}
+      </tbody>
+      <tfoot>
+        <tr className="text-gray-200 font-bold border-t-2 border-gray-700/50">
+          <td className="py-2 pr-3">Total</td>
+          <td colSpan="2" className="text-right px-3">₹{formatIndian(totals.buyValue)}</td>
+          <td colSpan="2"></td>
+          <td className="text-right px-3">₹{formatIndian(totals.sellValue)}</td>
+          <td className={clsx('text-right px-3', totals.totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400')}>
+            {totals.totalPnl >= 0 ? '+' : ''}₹{formatIndian(totals.totalPnl)}
+          </td>
+          <td className="text-right pl-3">{formatIndian(totals.remainingQty)}</td>
+        </tr>
+      </tfoot>
+    </table>
+  )
+}
+
+const LotRow = ({ lot }) => {
+  if (lot.sells.length === 0) {
+    return (
+      <tr className="border-b border-gray-800/50">
+        <td className="py-2 pr-3 text-gray-400">{lot.buyDate}</td>
+        <td className="text-right py-2 px-3">{formatIndian(lot.buyQty)}</td>
+        <td className="text-right py-2 px-3">₹{formatIndian(lot.buyPrice)}</td>
+        <td colSpan="4" className="py-2 px-3 text-center text-gray-600">-- Open --</td>
+        <td className="text-right py-2 pl-3 text-yellow-400">{formatIndian(lot.remainingQty)}</td>
+      </tr>
+    )
+  }
+
+  return lot.sells.map((sell, j) => (
+    <tr key={j} className="border-b border-gray-800/50">
+      {j === 0 && <>
+        <td rowSpan={lot.sells.length} className="py-2 pr-3 text-gray-400 align-top">{lot.buyDate}</td>
+        <td rowSpan={lot.sells.length} className="text-right py-2 px-3 align-top">{formatIndian(lot.buyQty)}</td>
+        <td rowSpan={lot.sells.length} className="text-right py-2 px-3 align-top">₹{formatIndian(lot.buyPrice)}</td>
+      </>}
+      <td className="py-2 px-3 text-gray-400">{sell.date}</td>
+      <td className="text-right py-2 px-3">{formatIndian(sell.qty)}</td>
+      <td className="text-right py-2 px-3">₹{formatIndian(sell.price)}</td>
+      <td className={clsx('text-right py-2 px-3 font-medium', sell.pnl >= 0 ? 'text-emerald-400' : 'text-red-400')}>
+        {sell.pnl >= 0 ? '+' : ''}{formatIndian(sell.pnl)}
+      </td>
+      {j === lot.sells.length - 1 &&
+        <td rowSpan={lot.sells.length} className="text-right py-2 pl-3 align-top">{formatIndian(lot.remainingQty)}</td>
+      }
+    </tr>
+  ))
 }

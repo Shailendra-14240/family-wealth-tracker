@@ -11,12 +11,15 @@ function parsePdfDate(s) {
   return `${y}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}`
 }
 
-export async function parseContractNotePdf(arrayBuffer) {
+export async function parseContractNotePdf(arrayBuffer, onProgress) {
   const pdf = await getDocument({ data: arrayBuffer }).promise
   const syntheticTxns = []
   let currentTradeDate = null
 
   for (let i = 1; i <= pdf.numPages; i++) {
+    // Yield to browser after each page to keep UI responsive
+    await new Promise(resolve => setTimeout(resolve, 0))
+
     const page = await pdf.getPage(i)
     const tc = await page.getTextContent()
 
@@ -63,8 +66,8 @@ export async function parseContractNotePdf(arrayBuffer) {
 
       // Symbol = everything before B/S match, strip leading/trailing / numbers etc
       const beforeBS = rest.slice(0, bsMatch.index).trim()
-        .replace(/^[\s\/]+|[\s\/]+$/g, '')
-      const symbol = beforeBS.split(/[\s\/]+/)[0].toUpperCase()
+        .replace(/^[\s\/\-]+|[\s\/\-]+$/g, '')
+      const symbol = beforeBS.split(/[\s\/\-]+/)[0].toUpperCase()
 
       // Filter out AF/EQ entries
       if (!symbol || /-[AFEQ]/.test(symbol)) { pos += 6; continue }
@@ -82,7 +85,7 @@ export async function parseContractNotePdf(arrayBuffer) {
         price: netRate || 0,
         date: currentTradeDate,
         expiry_date: currentTradeDate,
-        trade_id: `SYNTH-${symbol}-${currentTradeDate || 'unknown'}`,
+        trade_id: `SYNTH-${symbol}-${currentTradeDate}-${bs}-${qty}@${Math.round(netRate * 100)}`,
         order_id: null,
         order_execution_time: null,
         exchange: 'NSE',
@@ -91,6 +94,9 @@ export async function parseContractNotePdf(arrayBuffer) {
 
       pos += 6
     }
+
+    // Call progress callback if provided
+    if (onProgress) onProgress(i, pdf.numPages)
   }
 
   return syntheticTxns

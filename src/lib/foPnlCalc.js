@@ -1,16 +1,28 @@
 export function calculateFoPnl(transactions) {
   if (!transactions.length) return []
 
+  // Normalize symbols (handle rebranding)
+  function normalizeSymbol(symbol) {
+    // LTIM and LTM are the same company (rebranding)
+    if (symbol.includes('LTM') || symbol.includes('LTIM')) {
+      return symbol.replace(/LTM|LTIM/, 'LTIM')
+    }
+    return symbol
+  }
+
   // Separate by symbol and process chronologically
   const bySymbol = {}
   for (const t of transactions) {
-    if (!bySymbol[t.symbol]) bySymbol[t.symbol] = []
-    bySymbol[t.symbol].push({
+    const normalizedSymbol = normalizeSymbol(t.symbol)
+    if (!bySymbol[normalizedSymbol]) bySymbol[normalizedSymbol] = []
+    bySymbol[normalizedSymbol].push({
       type: t.type,
       date: t.date,
       qty: Number(t.qty),
       price: Number(t.price),
       _id: t.id,
+      expiryDate: t.expiry_date,
+      originalSymbol: t.symbol,
     })
   }
 
