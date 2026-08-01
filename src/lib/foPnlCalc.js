@@ -126,11 +126,20 @@ export function calculateFoPnl(transactions) {
     }
 
     const netQty = lots.reduce((s, l) => s + l.qty, 0)
+
+    // Premium: short lots collected, long lots paid
+    const openPremiumCollected = lots.filter(l => l.qty < 0).reduce((s, l) => s + Math.abs(l.qty) * l.price, 0)
+    const openPremiumPaid = lots.filter(l => l.qty > 0).reduce((s, l) => s + l.qty * l.price, 0)
+    const openPremium = openPremiumCollected - openPremiumPaid
+
     if (netQty !== 0 || realizedPnl !== 0) {
       results[symbol] = {
         symbol,
         netQty,
         realizedPnl: Math.round(realizedPnl * 100) / 100,
+        openPremiumCollected: Math.round(openPremiumCollected * 100) / 100,
+        openPremiumPaid: Math.round(openPremiumPaid * 100) / 100,
+        openPremium: Math.round(openPremium * 100) / 100,
         openLots: lots.map((l, i) => ({
           type: l.qty > 0 ? 'long' : 'short',
           qty: l.qty,
@@ -146,15 +155,19 @@ export function calculateFoPnl(transactions) {
 }
 
 export function calculateFoSummary(results) {
-  const totalInvested = 0 // Options don't have cost of carry in the same sense
   const totalRealizedPnl = results.reduce((s, r) => s + r.realizedPnl, 0)
   const shortQty = results.reduce((s, r) => s + Math.max(0, -r.netQty), 0)
   const longQty = results.reduce((s, r) => s + Math.max(0, r.netQty), 0)
+  const totalPremiumCollected = results.reduce((s, r) => s + (r.openPremiumCollected || 0), 0)
+  const totalPremiumPaid = results.reduce((s, r) => s + (r.openPremiumPaid || 0), 0)
+  const totalOpenPremium = totalPremiumCollected - totalPremiumPaid
   return {
     totalRealizedPnl: Math.round(totalRealizedPnl * 100) / 100,
-    totalInvested: Math.round(totalInvested * 100) / 100,
     openShortQty: shortQty,
     openLongQty: longQty,
+    totalPremiumCollected: Math.round(totalPremiumCollected * 100) / 100,
+    totalPremiumPaid: Math.round(totalPremiumPaid * 100) / 100,
+    totalOpenPremium: Math.round(totalOpenPremium * 100) / 100,
   }
 }
 

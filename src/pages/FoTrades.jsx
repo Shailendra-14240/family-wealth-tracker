@@ -4,6 +4,7 @@ import { parseFoCsv } from '../lib/foCsvParser'
 import { parseContractNotePdf } from '../lib/contractNoteParser'
 import { calculateFoPnl, calculateFoSummary, parseFoOptionSymbol } from '../lib/foPnlCalc'
 import { formatIndian } from '../lib/format'
+import { fetchFoPrices } from '../lib/foPriceFeed'
 
 export default function FoTrades() {
   const [foTxns, setFoTxns] = useState([])
@@ -20,6 +21,8 @@ export default function FoTrades() {
   const [summary, setSummary] = useState(null)
   const [allPnl, setAllPnl] = useState([])
   const [allSummary, setAllSummary] = useState(null)
+  const [foLivePrices, setFoLivePrices] = useState({})
+  const [liveLoading, setLiveLoading] = useState(false)
 
   // Contract note PDF
   const pdfRef = useRef()
@@ -54,7 +57,6 @@ export default function FoTrades() {
   }, [])
 
   function computePnl(txns) {
-    // Defer heavy calculation to avoid blocking UI on page load
     setTimeout(() => {
       const result = calculateFoPnl(txns)
       setAllPnl(result)
@@ -63,6 +65,22 @@ export default function FoTrades() {
       setSummary(calculateFoSummary(result))
     }, 50)
   }
+
+  // Fetch live option prices for open positions
+  useEffect(() => {
+    const openSymbols = allPnl.filter(r => r.netQty !== 0).map(r => r.symbol)
+    if (!openSymbols.length) return
+    const doFetch = () => {
+      setLiveLoading(true)
+      fetchFoPrices(openSymbols).then(prices => {
+        setFoLivePrices(prices)
+        setLiveLoading(false)
+      })
+    }
+    doFetch()
+    const interval = setInterval(doFetch, 60000)
+    return () => clearInterval(interval)
+  }, [allPnl])
 
   // Extract distinct months for filter (from expiry dates, not trade dates)
   const months = useMemo(() => {
@@ -125,13 +143,24 @@ export default function FoTrades() {
   const displayData = useMemo(() => {
     let data = pnlData.map(r => ({
       ...r,
-      ...calculateBuySellPrices(r)
+      ...calculateBuySellPrices(r),
+      ltp: foLivePrices[r.symbol] ?? null,
     }))
+    // Compute unrealized P&L for open positions
+    data = data.map(r => {
+      if (r.netQty === 0 || r.ltp == null) return { ...r, unrealizedPnl: null }
+      // netQty > 0 = long: profit when LTP > avg buy price
+      // netQty < 0 = short: profit when LTP < avg sell price
+      const openPrice = r.netQty > 0 ? r.avgBuyPrice : r.avgSellPrice
+      const unrealizedPnl = r.netQty > 0
+        ? (r.ltp - openPrice) * Math.abs(r.netQty)
+        : (openPrice - r.ltp) * Math.abs(r.netQty)
+      return { ...r, unrealizedPnl: Math.round(unrealizedPnl * 100) / 100 }
+    })
     
     if (filterStatus === 'open') data = data.filter(r => r.netQty !== 0)
     else if (filterStatus === 'closed') data = data.filter(r => r.netQty === 0)
     
-    // Apply column filters
     if (columnFilters.symbol) {
       data = data.filter(r => r.symbol.toUpperCase().includes(columnFilters.symbol.toUpperCase()))
     }
@@ -148,7 +177,6 @@ export default function FoTrades() {
       })
     }
     
-    // Sort
     data.sort((a, b) => {
       let aVal, bVal
       switch(sortBy) {
@@ -157,6 +185,7 @@ export default function FoTrades() {
         case 'buyPrice': aVal = a.avgBuyPrice; bVal = b.avgBuyPrice; break
         case 'sellPrice': aVal = a.avgSellPrice; bVal = b.avgSellPrice; break
         case 'pnl': aVal = a.realizedPnl; bVal = b.realizedPnl; break
+        case 'unrealized': aVal = a.unrealizedPnl ?? -Infinity; bVal = b.unrealizedPnl ?? -Infinity; break
         case 'status': aVal = a.netQty !== 0 ? 1 : 0; bVal = b.netQty !== 0 ? 1 : 0; break
         default: aVal = a.realizedPnl; bVal = b.realizedPnl
       }
@@ -167,7 +196,7 @@ export default function FoTrades() {
     })
     
     return data
-  }, [pnlData, filterStatus, sortBy, sortAsc, columnFilters])
+  }, [pnlData, filterStatus, sortBy, sortAsc, columnFilters, foLivePrices])
 
   const handleFileSelect = (e) => {
     const file = fileRef.current?.files?.[0]
@@ -489,7 +518,8 @@ export default function FoTrades() {
       </div>
 
       {summary && (
-        <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4">
+        <div className="rounded-xl bg-gray-900/60 border border-gray-800/50 p-4 space-y-3">
+          {/* Row 1: P&L + qty */}
           <div className="grid grid-cols-4 gap-3">
             <div>
               <p className="text-[10px] text-gray-500">Realized P&L</p>
@@ -510,6 +540,41 @@ export default function FoTrades() {
               <p className="text-base sm:text-lg font-bold text-white">{displayData.length}</p>
             </div>
           </div>
+          {/* Row 2: Premium breakdown */}
+          <div className="grid grid-cols-3 gap-3 pt-3 border-t border-gray-800/60">
+            <div>
+              <p className="text-[10px] text-gray-500">Net Open Premium</p>
+              <p className={`text-base sm:text-lg font-bold ${summary.totalOpenPremium >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {summary.totalOpenPremium >= 0 ? '+' : ''}₹{formatIndian(summary.totalOpenPremium)}
+              </p>
+              <p className="text-[9px] text-gray-600 mt-0.5">{summary.totalOpenPremium >= 0 ? 'Net seller' : 'Net buyer'}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-500">Collected (Short)</p>
+              <p className="text-base sm:text-lg font-bold text-emerald-400">₹{formatIndian(summary.totalPremiumCollected)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-500">Paid (Long)</p>
+              <p className="text-base sm:text-lg font-bold text-red-400">₹{formatIndian(summary.totalPremiumPaid)}</p>
+            </div>
+          </div>
+          {/* Row 3: Live unrealized P&L (if prices available) */}
+          {Object.keys(foLivePrices).length > 0 && (() => {
+            const totalUnrealized = displayData.reduce((s, r) => s + (r.unrealizedPnl ?? 0), 0)
+            return (
+              <div className="pt-3 border-t border-gray-800/60 flex items-center gap-2">
+                <div>
+                  <p className="text-[10px] text-gray-500 flex items-center gap-1">
+                    Unrealized P&L (Live)
+                    {liveLoading && <span className="inline-block w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />}
+                  </p>
+                  <p className={`text-base sm:text-lg font-bold ${totalUnrealized >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {totalUnrealized >= 0 ? '+' : ''}₹{formatIndian(Math.round(totalUnrealized))}
+                  </p>
+                </div>
+              </div>
+            )
+          })()}
         </div>
       )}
 
@@ -605,20 +670,23 @@ export default function FoTrades() {
                 className="text-right py-3 px-4 cursor-pointer hover:bg-gray-700/50 transition"
               >
                 <div className="flex items-center gap-1 justify-end">
-                  <span>P&L (₹) {sortBy === 'pnl' && (sortAsc ? '▲' : '▼')}</span>
+                  <span>Realized P&L {sortBy === 'pnl' && (sortAsc ? '▲' : '▼')}</span>
                 </div>
-                {activeFilterCol === 'pnl' && (
-                  <input
-                    type="text"
-                    placeholder="Filter..."
-                    value={columnFilters.pnl || ''}
-                    onChange={(e) => setColumnFilters({...columnFilters, pnl: e.target.value})}
-                    onClick={(e) => e.stopPropagation()}
-                    className="w-full mt-1 px-2 py-1 text-xs bg-gray-700 text-white rounded border border-gray-600"
-                    autoFocus
-                  />
-                )}
               </th>
+              
+              {/* LTP */}
+              <th className="text-right py-3 px-4">LTP</th>
+
+              {/* Unrealized P&L */}
+              <th
+                onClick={() => { setSortBy('unrealized'); setSortAsc(!sortAsc) }}
+                className="text-right py-3 px-4 cursor-pointer hover:bg-gray-700/50 transition"
+              >
+                <span>Unreal. P&L {sortBy === 'unrealized' && (sortAsc ? '▲' : '▼')}</span>
+              </th>
+              
+              {/* Open Premium */}
+              <th className="text-right py-3 px-4">Open Premium</th>
               
               {/* Status */}
               <th 
@@ -664,6 +732,30 @@ export default function FoTrades() {
                     r.realizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'
                   }`}>
                     {r.realizedPnl >= 0 ? '+' : ''}₹{formatIndian(r.realizedPnl)}
+                  </td>
+                  {/* LTP */}
+                  <td className="py-2 px-4 text-right text-white">
+                    {isOpen && r.ltp != null
+                      ? `₹${formatIndian(r.ltp)}`
+                      : <span className="text-gray-600">—</span>}
+                  </td>
+                  {/* Unrealized P&L */}
+                  <td className={`py-2 px-4 text-right font-medium ${
+                    r.unrealizedPnl == null ? 'text-gray-600'
+                    : r.unrealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'
+                  }`}>
+                    {isOpen && r.unrealizedPnl != null
+                      ? `${r.unrealizedPnl >= 0 ? '+' : ''}₹${formatIndian(Math.round(r.unrealizedPnl))}`
+                      : <span className="text-gray-600">—</span>}
+                  </td>
+                  {/* Open Premium */}
+                  <td className={`py-2 px-4 text-right text-sm ${
+                    !isOpen ? 'text-gray-600'
+                    : r.openPremium >= 0 ? 'text-emerald-400' : 'text-red-400'
+                  }`}>
+                    {isOpen
+                      ? `${r.openPremium >= 0 ? '+' : ''}₹${formatIndian(r.openPremium)}`
+                      : '—'}
                   </td>
                   <td className="py-2 px-4 text-center">
                     <span className={`px-2 py-1 rounded text-xs font-medium ${

@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { calculateHoldings, calculateSummary } from '../lib/pnlCalc'
-import { formatIndian } from '../lib/format' // Removed isFOSymbol import
+import { calculateFoPnl, calculateFoSummary } from '../lib/foPnlCalc'
+import { formatIndian } from '../lib/format'
 import { fetchPrices } from '../lib/priceFeed'
+import { fetchFoPrices } from '../lib/foPriceFeed'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import clsx from 'clsx'
 
@@ -46,9 +48,11 @@ export default function Dashboard() {
   // --- State ---
   const [accounts, setAccounts] = useState([])
   const [allTxns, setAllTxns] = useState([])
+  const [foTxns, setFoTxns] = useState([])
   const [allActions, setAllActions] = useState([])
   const [snapshots, setSnapshots] = useState([])
   const [currentPrices, setCurrentPrices] = useState({})
+  const [foLivePrices, setFoLivePrices] = useState({})
   const [loading, setLoading] = useState(true)
 
   // --- Data Fetching ---
@@ -60,11 +64,13 @@ export default function Dashboard() {
       supabase.from('transactions').select('*').limit(1000000),
       supabase.from('corporate_actions').select('*'),
       supabase.from('net_worth_snapshots').select('*').order('date').limit(365),
-    ]).then(([acctRes, txnRes, actRes, snapRes]) => {
+      supabase.from('fo_transactions').select('*').limit(1000000),
+    ]).then(([acctRes, txnRes, actRes, snapRes, foRes]) => {
       if (acctRes.data) setAccounts(acctRes.data)
       if (txnRes.data) setAllTxns(txnRes.data)
       if (actRes.data) setAllActions(actRes.data)
       if (snapRes.data) setSnapshots(snapRes.data)
+      if (foRes.data) setFoTxns(foRes.data)
       setLoading(false)
     }).catch(err => {
       console.error(err)
@@ -77,6 +83,11 @@ export default function Dashboard() {
   const summary = useMemo(() => calculateSummary(holdings), [holdings])
   const allOpenSymbols = useMemo(() => [...new Set(holdings.filter(h => h.qty > 0).map(h => h.symbol))], [holdings])
 
+  const foSummary = useMemo(() => {
+    const results = calculateFoPnl(foTxns)
+    return calculateFoSummary(results)
+  }, [foTxns])
+
   useEffect(() => {
     if (!allOpenSymbols.length) return
     const fetch = () => fetchPrices(allOpenSymbols).then(setCurrentPrices)
@@ -84,6 +95,19 @@ export default function Dashboard() {
     const interval = setInterval(fetch, 180000)
     return () => clearInterval(interval)
   }, [allOpenSymbols])
+
+  // Live F&O prices for open positions
+  const openFoSymbols = useMemo(() => foTxns.length
+    ? calculateFoPnl(foTxns).filter(r => r.netQty !== 0).map(r => r.symbol)
+    : [], [foTxns])
+
+  useEffect(() => {
+    if (!openFoSymbols.length) return
+    const doFetch = () => fetchFoPrices(openFoSymbols).then(setFoLivePrices)
+    doFetch()
+    const interval = setInterval(doFetch, 60000)
+    return () => clearInterval(interval)
+  }, [openFoSymbols])
 
   const totalUnrealizedPnl = useMemo(() => {
     return holdings.reduce((total, h) => {
@@ -100,10 +124,27 @@ export default function Dashboard() {
     return { netWorth, totalAssets: assets, totalLiabilities: liabilities }
   }, [accounts, summary.totalInvested, totalUnrealizedPnl])
 
+  const foUnrealizedPnl = useMemo(() => {
+    if (!Object.keys(foLivePrices).length) return null
+    const openPositions = calculateFoPnl(foTxns).filter(r => r.netQty !== 0)
+    return openPositions.reduce((total, r) => {
+      const ltp = foLivePrices[r.symbol]
+      if (ltp == null) return total
+      // Short: profit when price falls; Long: profit when price rises
+      const openPrice = r.netQty < 0
+        ? r.openLots.reduce((s, l) => s + Math.abs(l.qty) * l.price, 0) / Math.abs(r.netQty)
+        : r.openLots.reduce((s, l) => s + l.qty * l.price, 0) / r.netQty
+      const pnl = r.netQty < 0
+        ? (openPrice - ltp) * Math.abs(r.netQty)
+        : (ltp - openPrice) * r.netQty
+      return total + pnl
+    }, 0)
+  }, [foTxns, foLivePrices])
+
   const perAccountSummary = useMemo(() => {
     if (!accounts.length) return []
     return accounts.map(acct => {
-      const txns = allTxns.filter(t => t.account_id === acct.id)
+      const txns = allTxns.filter(t => Number(t.account_id) === Number(acct.id))
       const h = calculateHoldings(txns, allActions)
       const s = calculateSummary(h)
       const unrealizedPnl = h.reduce((total, pos) => {
@@ -111,14 +152,20 @@ export default function Dashboard() {
         const price = currentPrices[pos.symbol]
         return price > 0 ? total + (price - pos.avgCost) * pos.qty : total
       }, 0)
+
+      const accountFoTxns = foTxns.filter(t => Number(t.account_id) === Number(acct.id))
+      const foResults = calculateFoPnl(accountFoTxns)
+      const foSumm = calculateFoSummary(foResults)
+
       return {
         ...acct,
         invested: s.totalInvested,
         realizedPnl: s.totalRealizedPnl,
         unrealizedPnl,
+        foRealizedPnl: foSumm.totalRealizedPnl,
       }
     })
-  }, [accounts, allTxns, allActions, currentPrices])
+  }, [accounts, allTxns, allActions, currentPrices, foTxns])
 
   const topHoldings = useMemo(() => {
     const bySymbol = holdings.reduce((acc, h) => {
@@ -147,7 +194,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
         <div className="md:col-span-2 rounded-2xl bg-gray-900/70 border border-gray-800/80 p-4 md:p-6">
           <p className="text-sm font-medium text-gray-400">Net Worth</p>
           <p className="text-3xl sm:text-4xl font-bold tracking-tight text-white mt-1">₹{formatIndian(netWorth)}</p>
@@ -172,6 +219,16 @@ export default function Dashboard() {
           <StatCard label="Invested" value={summary.totalInvested} />
           <StatCard label="Unrealized P&L" value={totalUnrealizedPnl} isPnl />
           <StatCard label="Realized P&L" value={summary.totalRealizedPnl} isPnl />
+          <StatCard label="F&O Realized P&L" value={foSummary.totalRealizedPnl} isPnl />
+          <StatCard
+            label="F&O Open Premium"
+            value={foSummary.totalOpenPremium}
+            isPnl
+            subtitle={foSummary.totalOpenPremium >= 0 ? 'Net seller' : 'Net buyer'}
+          />
+          {foUnrealizedPnl != null && (
+            <StatCard label="F&O Unrealized P&L" value={Math.round(foUnrealizedPnl)} isPnl subtitle="Live" />
+          )}
         </div>
       </div>
 
@@ -204,7 +261,7 @@ export default function Dashboard() {
 }
 
 // --- Sub-Components ---
-const StatCard = ({ label, value, isPnl = false }) => {
+const StatCard = ({ label, value, isPnl = false, subtitle = null }) => {
   const color = isPnl ? (value >= 0 ? 'text-emerald-400' : 'text-red-400') : 'text-blue-400'
   const sign = isPnl && value >= 0 ? '+' : ''
   return (
@@ -213,12 +270,13 @@ const StatCard = ({ label, value, isPnl = false }) => {
       <p className={clsx('text-2xl font-bold tracking-tight mt-1', color)}>
         {sign}₹{formatIndian(value)}
       </p>
+      {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
     </div>
   )
 }
 
 const AccountCard = ({ account }) => (
-  <div className="rounded-xl bg-gray-900/70 border border-gray-800/80 p-4 flex flex-col h-full">
+  <div className="rounded-xl bg-gray-900/70 border border-gray-800/80 p-4 flex flex-col">
     <div className="flex justify-between items-start">
       <div>
         <p className="font-semibold text-white">{account.name}</p>
@@ -245,6 +303,14 @@ const AccountCard = ({ account }) => (
           {account.realizedPnl >= 0 ? '+' : ''}₹{formatIndian(account.realizedPnl)}
         </p>
       </div>
+      {account.foRealizedPnl !== undefined && account.foRealizedPnl !== 0 && (
+        <div className="flex justify-between">
+          <p className="text-gray-400">F&O Realized P&L</p>
+          <p className={clsx('font-medium', account.foRealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400')}>
+            {account.foRealizedPnl >= 0 ? '+' : ''}₹{formatIndian(account.foRealizedPnl)}
+          </p>
+        </div>
+      )}
     </div>
   </div>
 )
